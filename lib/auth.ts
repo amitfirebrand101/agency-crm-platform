@@ -38,7 +38,8 @@ export type SessionUser = {
 };
 
 export function isAuthDisabled() {
-  return process.env.AUTH_DISABLED === "true";
+  const value = process.env.AUTH_DISABLED?.replace(/^["']|["']$/g, "").toLowerCase();
+  return value === "true" || value === "1" || value === "yes";
 }
 
 export async function getAuthUser() {

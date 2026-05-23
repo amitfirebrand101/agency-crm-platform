@@ -5,11 +5,15 @@ type PublicEnv = {
   supabasePublishableKey: string;
 };
 
+function clean(value: string | undefined) {
+  return value?.replace(/^["']|["']$/g, "");
+}
+
 const env = {
-  appName: process.env.NEXT_PUBLIC_APP_NAME ?? "GoLowLevel",
-  appUrl: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
-  supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
-  supabasePublishableKey: process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+  appName: clean(process.env.NEXT_PUBLIC_APP_NAME) ?? "GoLowLevel",
+  appUrl: clean(process.env.NEXT_PUBLIC_APP_URL) ?? "http://localhost:3000",
+  supabaseUrl: clean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+  supabasePublishableKey: clean(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY)
 };
 
 export function getPublicEnv(): PublicEnv {
