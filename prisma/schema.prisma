@@ -1,0 +1,421 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum AgencyRole {
+  OWNER
+  ADMIN
+  MEMBER
+  READ_ONLY
+}
+
+enum SubAccountRole {
+  ADMIN
+  SALES
+  SUPPORT
+  READ_ONLY
+}
+
+enum FieldType {
+  TEXT
+  NUMBER
+  DATE
+  SELECT
+  BOOLEAN
+  URL
+}
+
+enum ContactStatus {
+  LEAD
+  CUSTOMER
+  INACTIVE
+}
+
+enum ConversationChannel {
+  SMS
+  EMAIL
+  CALL
+  VOICEMAIL
+  INTERNAL_NOTE
+}
+
+enum ConversationStatus {
+  OPEN
+  PENDING
+  CLOSED
+}
+
+enum OpportunityStatus {
+  OPEN
+  WON
+  LOST
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  LOGIN
+  INVITE
+}
+
+model User {
+  id                    String                 @id @db.Uuid
+  name                  String?
+  email                 String                 @unique
+  imageUrl              String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  agencyMemberships     AgencyMembership[]
+  subAccountMemberships SubAccountMembership[]
+  assignedContacts      Contact[]              @relation("AssignedContacts")
+  auditLogs             AuditLog[]
+}
+
+model Agency {
+  id           String             @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String             @unique
+  timezone     String             @default("America/New_York")
+  currency     String             @default("USD")
+  country      String             @default("US")
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  members      AgencyMembership[]
+  subAccounts  SubAccount[]
+  tags         Tag[]
+  customFields CustomField[]
+  auditLogs    AuditLog[]
+  Contact      Contact[]
+}
+
+model AgencyMembership {
+  id        String     @id @default(uuid()) @db.Uuid
+  agencyId  String     @db.Uuid
+  userId    String     @db.Uuid
+  role      AgencyRole @default(MEMBER)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  agency    Agency     @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([agencyId, userId])
+  @@index([userId])
+}
+
+model SubAccount {
+  id            String                 @id @default(uuid()) @db.Uuid
+  agencyId      String                 @db.Uuid
+  name          String
+  slug          String
+  timezone      String                 @default("America/New_York")
+  addressLine1  String?
+  city          String?
+  region        String?
+  country       String?                @default("US")
+  postalCode    String?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  agency        Agency                 @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  members       SubAccountMembership[]
+  contacts      Contact[]
+  tags          Tag[]
+  customFields  CustomField[]
+  pipelines     Pipeline[]
+  conversations Conversation[]
+  calendars     Calendar[]
+  automations   Automation[]
+  sites         Site[]
+  campaigns     MarketingCampaign[]
+  phoneNumbers  PhoneNumber[]
+
+  @@unique([agencyId, slug])
+  @@index([agencyId])
+}
+
+model SubAccountMembership {
+  id           String         @id @default(uuid()) @db.Uuid
+  subAccountId String         @db.Uuid
+  userId       String         @db.Uuid
+  role         SubAccountRole @default(SALES)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  subAccount   SubAccount     @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([subAccountId, userId])
+  @@index([userId])
+}
+
+model Contact {
+  id             String             @id @default(uuid()) @db.Uuid
+  agencyId       String             @db.Uuid
+  subAccountId   String             @db.Uuid
+  assignedUserId String?            @db.Uuid
+  firstName      String
+  lastName       String?
+  email          String?
+  phone          String?
+  companyName    String?
+  status         ContactStatus      @default(LEAD)
+  source         String?
+  timezone       String?
+  addressLine1   String?
+  city           String?
+  region         String?
+  country        String?
+  postalCode     String?
+  emailOptOut    Boolean            @default(false)
+  smsOptOut      Boolean            @default(false)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  agency         Agency             @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  subAccount     SubAccount         @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  assignedUser   User?              @relation("AssignedContacts", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  tags           ContactTag[]
+  customValues   CustomFieldValue[]
+  opportunities  Opportunity[]
+  conversations  Conversation[]
+  appointments   Appointment[]
+
+  @@index([agencyId, subAccountId])
+  @@index([subAccountId, email])
+  @@index([subAccountId, phone])
+}
+
+model Tag {
+  id           String       @id @default(uuid()) @db.Uuid
+  agencyId     String       @db.Uuid
+  subAccountId String?      @db.Uuid
+  name         String
+  color        String       @default("#0e7490")
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+  agency       Agency       @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  subAccount   SubAccount?  @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  contacts     ContactTag[]
+
+  @@unique([agencyId, subAccountId, name])
+  @@index([subAccountId])
+}
+
+model ContactTag {
+  contactId String   @db.Uuid
+  tagId     String   @db.Uuid
+  createdAt DateTime @default(now())
+  contact   Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  tag       Tag      @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([contactId, tagId])
+}
+
+model CustomField {
+  id           String             @id @default(uuid()) @db.Uuid
+  agencyId     String             @db.Uuid
+  subAccountId String?            @db.Uuid
+  name         String
+  key          String
+  type         FieldType          @default(TEXT)
+  options      Json?
+  required     Boolean            @default(false)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  agency       Agency             @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  subAccount   SubAccount?        @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  values       CustomFieldValue[]
+
+  @@unique([agencyId, subAccountId, key])
+  @@index([subAccountId])
+}
+
+model CustomFieldValue {
+  id            String      @id @default(uuid()) @db.Uuid
+  contactId     String      @db.Uuid
+  customFieldId String      @db.Uuid
+  value         Json
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  contact       Contact     @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  customField   CustomField @relation(fields: [customFieldId], references: [id], onDelete: Cascade)
+
+  @@unique([contactId, customFieldId])
+}
+
+model Pipeline {
+  id           String          @id @default(uuid()) @db.Uuid
+  agencyId     String          @db.Uuid
+  subAccountId String          @db.Uuid
+  name         String
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  subAccount   SubAccount      @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  stages       PipelineStage[]
+
+  @@index([agencyId, subAccountId])
+}
+
+model PipelineStage {
+  id            String        @id @default(uuid()) @db.Uuid
+  pipelineId    String        @db.Uuid
+  name          String
+  position      Int
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  pipeline      Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  opportunities Opportunity[]
+
+  @@unique([pipelineId, position])
+}
+
+model Opportunity {
+  id           String            @id @default(uuid()) @db.Uuid
+  agencyId     String            @db.Uuid
+  subAccountId String            @db.Uuid
+  stageId      String            @db.Uuid
+  contactId    String?           @db.Uuid
+  name         String
+  valueCents   Int               @default(0)
+  status       OpportunityStatus @default(OPEN)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  stage        PipelineStage     @relation(fields: [stageId], references: [id], onDelete: Cascade)
+  contact      Contact?          @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([agencyId, subAccountId])
+}
+
+model Conversation {
+  id           String              @id @default(uuid()) @db.Uuid
+  agencyId     String              @db.Uuid
+  subAccountId String              @db.Uuid
+  contactId    String?             @db.Uuid
+  channel      ConversationChannel
+  status       ConversationStatus  @default(OPEN)
+  subject      String?
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  subAccount   SubAccount          @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  contact      Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  messages     Message[]
+
+  @@index([agencyId, subAccountId, status])
+}
+
+model Message {
+  id             String       @id @default(uuid()) @db.Uuid
+  conversationId String       @db.Uuid
+  body           String
+  direction      String
+  providerId     String?
+  createdAt      DateTime     @default(now())
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+}
+
+model Calendar {
+  id           String        @id @default(uuid()) @db.Uuid
+  agencyId     String        @db.Uuid
+  subAccountId String        @db.Uuid
+  name         String
+  timezone     String        @default("America/New_York")
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  subAccount   SubAccount    @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@index([agencyId, subAccountId])
+}
+
+model Appointment {
+  id         String   @id @default(uuid()) @db.Uuid
+  calendarId String   @db.Uuid
+  contactId  String?  @db.Uuid
+  startsAt   DateTime
+  endsAt     DateTime
+  title      String
+  status     String   @default("scheduled")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  calendar   Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  contact    Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+}
+
+model Automation {
+  id           String     @id @default(uuid()) @db.Uuid
+  agencyId     String     @db.Uuid
+  subAccountId String     @db.Uuid
+  name         String
+  status       String     @default("draft")
+  definition   Json       @default("{}")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId, subAccountId])
+}
+
+model Site {
+  id           String     @id @default(uuid()) @db.Uuid
+  agencyId     String     @db.Uuid
+  subAccountId String     @db.Uuid
+  name         String
+  domain       String?
+  status       String     @default("draft")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId, subAccountId])
+}
+
+model MarketingCampaign {
+  id           String     @id @default(uuid()) @db.Uuid
+  agencyId     String     @db.Uuid
+  subAccountId String     @db.Uuid
+  name         String
+  channel      String
+  status       String     @default("draft")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId, subAccountId])
+}
+
+model PhoneNumber {
+  id           String     @id @default(uuid()) @db.Uuid
+  agencyId     String     @db.Uuid
+  subAccountId String     @db.Uuid
+  number       String
+  provider     String?
+  capability   String     @default("sms_voice")
+  status       String     @default("reserved")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, number])
+  @@index([agencyId, subAccountId])
+}
+
+model AuditLog {
+  id          String      @id @default(uuid()) @db.Uuid
+  agencyId    String      @db.Uuid
+  actorUserId String?     @db.Uuid
+  action      AuditAction
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  ipAddress   String?
+  createdAt   DateTime    @default(now())
+  agency      Agency      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  actor       User?       @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([agencyId, createdAt])
+  @@index([actorUserId])
+}
