@@ -1,19 +1,42 @@
 import { KeyRound, ShieldCheck, SlidersHorizontal, UsersRound } from "lucide-react";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { DbWarning } from "@/components/ui/db-warning";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 export default async function SettingsPage() {
   const user = await requireUser();
-  const agency = await prisma.agency.findUniqueOrThrow({
-    where: { id: user.agencyId },
-    include: {
-      members: {
-        include: { user: true },
-        orderBy: { createdAt: "asc" }
+  let databaseUnavailable = false;
+  let agency = {
+    name: user.agencyName,
+    slug: "golowlevel-agency",
+    country: "US",
+    members: [
+      {
+        id: user.id,
+        role: user.agencyRole,
+        user: {
+          name: user.name,
+          email: user.email
+        }
       }
-    }
-  });
+    ]
+  };
+
+  try {
+    agency = await prisma.agency.findUniqueOrThrow({
+      where: { id: user.agencyId },
+      include: {
+        members: {
+          include: { user: true },
+          orderBy: { createdAt: "asc" }
+        }
+      }
+    });
+  } catch (error) {
+    databaseUnavailable = true;
+    console.error("Settings page database query failed", error);
+  }
 
   return (
     <div className="space-y-6">
@@ -23,6 +46,7 @@ export default async function SettingsPage() {
           Security-first agency administration for auth, roles, tenant defaults, and audit-ready operations.
         </p>
       </div>
+      {databaseUnavailable ? <DbWarning /> : null}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <Card>
           <CardBody>

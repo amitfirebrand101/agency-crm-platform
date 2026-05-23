@@ -1,27 +1,41 @@
 import { Plus, Tags } from "lucide-react";
+import type { Prisma } from "@prisma/client";
 import { createContact, createCustomField, createTag } from "@/app/(dashboard)/contacts/actions";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { DbWarning } from "@/components/ui/db-warning";
 import { Field } from "@/components/ui/field";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+type ContactWithTags = Prisma.ContactGetPayload<{ include: { tags: { include: { tag: true } } } }>;
+
 export default async function ContactsPage() {
   const user = await requireUser();
-  const [contacts, tags, customFields] = await Promise.all([
-    prisma.contact.findMany({
-      where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
-      orderBy: { createdAt: "desc" },
-      include: { tags: { include: { tag: true } } }
-    }),
-    prisma.tag.findMany({
-      where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
-      orderBy: { name: "asc" }
-    }),
-    prisma.customField.findMany({
-      where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
-      orderBy: { name: "asc" }
-    })
-  ]);
+  let databaseUnavailable = false;
+  let contacts: ContactWithTags[] = [];
+  let tags: Awaited<ReturnType<typeof prisma.tag.findMany>> = [];
+  let customFields: Awaited<ReturnType<typeof prisma.customField.findMany>> = [];
+
+  try {
+    [contacts, tags, customFields] = await Promise.all([
+      prisma.contact.findMany({
+        where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
+        orderBy: { createdAt: "desc" },
+        include: { tags: { include: { tag: true } } }
+      }),
+      prisma.tag.findMany({
+        where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
+        orderBy: { name: "asc" }
+      }),
+      prisma.customField.findMany({
+        where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
+        orderBy: { name: "asc" }
+      })
+    ]);
+  } catch (error) {
+    databaseUnavailable = true;
+    console.error("Contacts page database query failed", error);
+  }
 
   return (
     <div className="space-y-6">
@@ -31,6 +45,7 @@ export default async function ContactsPage() {
           Tenant-scoped contact management with tags, custom fields, consent flags, source attribution, and audit logging.
         </p>
       </div>
+      {databaseUnavailable ? <DbWarning /> : null}
 
       <section className="grid gap-6 xl:grid-cols-[1fr_22rem]">
         <Card>

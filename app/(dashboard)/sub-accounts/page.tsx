@@ -1,25 +1,39 @@
 import { Building2, Plus } from "lucide-react";
+import type { Prisma } from "@prisma/client";
 import { createSubAccount } from "@/app/(dashboard)/sub-accounts/actions";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { DbWarning } from "@/components/ui/db-warning";
 import { Field } from "@/components/ui/field";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
+type SubAccountWithCounts = Prisma.SubAccountGetPayload<{
+  include: { _count: { select: { contacts: true; members: true; phoneNumbers: true } } };
+}>;
+
 export default async function SubAccountsPage() {
   const user = await requireUser();
-  const subAccounts = await prisma.subAccount.findMany({
-    where: { agencyId: user.agencyId },
-    orderBy: { createdAt: "asc" },
-    include: {
-      _count: {
-        select: {
-          contacts: true,
-          members: true,
-          phoneNumbers: true
+  let databaseUnavailable = false;
+  let subAccounts: SubAccountWithCounts[] = [];
+
+  try {
+    subAccounts = await prisma.subAccount.findMany({
+      where: { agencyId: user.agencyId },
+      orderBy: { createdAt: "asc" },
+      include: {
+        _count: {
+          select: {
+            contacts: true,
+            members: true,
+            phoneNumbers: true
+          }
         }
       }
-    }
-  });
+    });
+  } catch (error) {
+    databaseUnavailable = true;
+    console.error("Sub accounts page database query failed", error);
+  }
 
   return (
     <div className="space-y-6">
@@ -29,6 +43,7 @@ export default async function SubAccountsPage() {
           Client locations live under the agency and isolate contacts, conversations, calendars, numbers, sites, and campaigns.
         </p>
       </div>
+      {databaseUnavailable ? <DbWarning /> : null}
       <section className="grid gap-6 xl:grid-cols-[1fr_22rem]">
         <div className="grid gap-4 md:grid-cols-2">
           {subAccounts.map((subAccount) => (
