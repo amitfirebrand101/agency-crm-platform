@@ -5,6 +5,7 @@ import { canWriteSubAccount, requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { auditLog } from "@/lib/security";
 import { contactSchema, customFieldSchema, tagSchema } from "@/lib/validation";
+import { runAutomationsForEvent } from "@/lib/automations/executor";
 
 export async function createContact(formData: FormData) {
   const user = await requireUser();
@@ -33,6 +34,19 @@ export async function createContact(formData: FormData) {
     action: "CREATE",
     entityType: "Contact",
     entityId: contact.id
+  });
+
+  await runAutomationsForEvent({
+    type: "CONTACT_CREATED",
+    agencyId: user.agencyId,
+    subAccountId: user.subAccountId,
+    contactId: contact.id,
+    payload: {
+      email: contact.email,
+      firstName: contact.firstName,
+      lastName: contact.lastName,
+      source: contact.source
+    }
   });
 
   revalidatePath("/contacts");
