@@ -1,5 +1,71 @@
 # Changelog
 
+## 0.3.0 - 2026-05-24
+
+Major feature expansion and production hardening across all CRM modules.
+
+### Schema
+- Added `AutomationRunStatus` enum.
+- Added `AutomationRun` model with full run tracking (trigger type, status, payload, timestamps, error).
+- Added `AutomationStepRun` model with per-step execution records.
+- Added `runs` back-relation on `Automation`.
+- Added `prisma/manual-sql/add-automation-runs.sql` for manual Supabase migration.
+
+### Automations
+- Executor now creates `AutomationRun` and `AutomationStepRun` records on every run.
+- Added real If/Else condition evaluation (`contact.field.equals`, `contact.hasTag`, `contact.status.is`).
+- Added `OUTBOUND_WEBHOOK` action with SSRF protection (`lib/automations/ssrf-guard.ts`) — blocks private IP ranges, enforces http/https, validates URL, sets timeout and User-Agent.
+- Added `OPPORTUNITY_STATUS` trigger type to catalog.
+- Added delete workflow, remove trigger, remove step actions.
+- Automations page now shows run history with status icons.
+- Automations page now shows webhook URL for `INBOUND_WEBHOOK` triggers.
+- Fixed redirect error swallowing in outer try/catch (now re-throws navigation errors).
+
+### Contacts
+- Added `updateContact`, `deleteContact`, `assignTagToContact`, `removeTagFromContact` server actions.
+- Contacts list page now supports search (first/last name, email, company) and status filtering.
+- Contacts list rows are now clickable links.
+- New contact detail page (`/contacts/[id]`) with edit form, tag management, activity timeline, danger zone delete.
+
+### Conversations
+- Conversations list page now supports channel and status filtering.
+- Clickable rows link to conversation detail.
+- New conversation detail page (`/conversations/[id]`) with message thread, send form (outbound/inbound/internal note), and status actions.
+
+### Opportunities
+- Opportunities page now shows a per-pipeline Kanban board with stage columns, deal cards, and move/status forms.
+- Added pipeline summary stats (open deals, pipeline value, won count).
+- Added `moveOpportunityToStage` and `updateOpportunityStatus` server actions.
+
+### Calendars
+- Calendar list cards are now clickable links to the detail page.
+- New calendar detail page (`/calendars/[id]`) with appointment list (upcoming/past), status update forms, and new appointment creation form.
+- Added `createAppointment` and `updateAppointmentStatus` server actions.
+
+### Dashboard
+- Real metrics: open conversations, pipeline value, published automations, upcoming appointments.
+- Pipeline by stage widget showing open deal counts and values.
+- Recent automation runs table (if `AutomationRun` table exists).
+- All static/placeholder stat cards replaced with live DB queries.
+
+### Settings
+- Added agency profile edit form with `updateAgency` server action.
+- Audit log panel showing last 30 events with actor, action, entity type, and timestamp.
+
+### Marketing / Calling / SMS
+- Marketing page shows campaign summary stats and provider connection status.
+- Calling page redesigned with provider status panel and A2P compliance note.
+- SMS page redesigned with linked conversation threads and provider status.
+
+### UI
+- Added `Badge` component with status-aware `statusVariant` helper.
+- Added `SidebarNav` client component with active route highlighting.
+- `AppShell` no longer throws on missing Supabase env vars for the app name.
+- Nav active state highlights current module.
+
+### Validation
+- Extended `lib/validation.ts` with `messageSchema`, `appointmentSchema`, `agencySchema`, contact `status` field.
+
 ## 0.2.0 - 2026-05-24
 
 - Renamed product direction to GoLowLevel.

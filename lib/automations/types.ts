@@ -12,6 +12,8 @@ export type AutomationStep = {
   type: AutomationActionType;
   name: string;
   config: Record<string, string>;
+  trueBranch?: AutomationStep[];
+  falseBranch?: AutomationStep[];
 };
 
 export type AutomationDefinition = {

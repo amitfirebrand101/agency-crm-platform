@@ -65,6 +65,14 @@ enum AuditAction {
   INVITE
 }
 
+enum AutomationRunStatus {
+  RUNNING
+  WAITING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
 model User {
   id                    String                 @id @db.Uuid
   name                  String?
@@ -346,17 +354,53 @@ model Appointment {
 }
 
 model Automation {
-  id           String     @id @default(uuid()) @db.Uuid
-  agencyId     String     @db.Uuid
-  subAccountId String     @db.Uuid
+  id           String          @id @default(uuid()) @db.Uuid
+  agencyId     String          @db.Uuid
+  subAccountId String          @db.Uuid
   name         String
-  status       String     @default("draft")
-  definition   Json       @default("{}")
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
-  subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  status       String          @default("draft")
+  definition   Json            @default("{}")
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  subAccount   SubAccount      @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  runs         AutomationRun[]
 
   @@index([agencyId, subAccountId])
+}
+
+model AutomationRun {
+  id           String              @id @default(uuid()) @db.Uuid
+  automationId String              @db.Uuid
+  agencyId     String              @db.Uuid
+  subAccountId String              @db.Uuid
+  contactId    String?             @db.Uuid
+  status       AutomationRunStatus @default(RUNNING)
+  triggerType  String
+  payload      Json?
+  startedAt    DateTime            @default(now())
+  completedAt  DateTime?
+  error        String?
+  automation   Automation          @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  stepRuns     AutomationStepRun[]
+
+  @@index([automationId])
+  @@index([agencyId, subAccountId, startedAt])
+}
+
+model AutomationStepRun {
+  id        String        @id @default(uuid()) @db.Uuid
+  runId     String        @db.Uuid
+  stepId    String
+  stepType  String
+  stepName  String
+  status    String
+  output    Json?
+  error     String?
+  startedAt DateTime      @default(now())
+  endedAt   DateTime?
+  run       AutomationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+
+  @@index([runId])
 }
 
 model Site {

@@ -12,11 +12,13 @@ import {
   Moon,
   PhoneCall,
   Settings,
-  Target,
+  Target
 } from "lucide-react";
 import { signOut } from "@/app/(dashboard)/actions";
+import { SidebarNav } from "@/components/layout/sidebar-nav";
 import type { SessionUser } from "@/lib/auth";
-import { getPublicEnv } from "@/lib/env";
+
+const appName = process.env.NEXT_PUBLIC_APP_NAME?.replace(/^["']|["']$/g, "") ?? "GoLowLevel";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -31,7 +33,7 @@ const navItems = [
   { href: "/sms", label: "SMS", icon: MessageSquareText },
   { href: "/sub-accounts", label: "Sub accounts", icon: Building2 },
   { href: "/settings", label: "Settings", icon: Settings }
-] as const;
+];
 
 type AppShellProps = {
   user: SessionUser;
@@ -39,8 +41,6 @@ type AppShellProps = {
 };
 
 export function AppShell({ user, children }: AppShellProps) {
-  const env = getPublicEnv();
-
   return (
     <div className="min-h-screen bg-background">
       <aside className="fixed inset-y-0 left-0 hidden w-[17rem] border-r border-border bg-panel px-3 py-4 lg:block">
@@ -49,7 +49,7 @@ export function AppShell({ user, children }: AppShellProps) {
             <Activity size={21} />
           </div>
           <div>
-            <div className="font-semibold">{env.appName}</div>
+            <div className="font-semibold">{appName}</div>
             <div className="text-xs text-muted">Agency CRM</div>
           </div>
         </Link>
@@ -57,18 +57,7 @@ export function AppShell({ user, children }: AppShellProps) {
           <div className="text-xs font-medium uppercase text-muted">Sub account</div>
           <div className="mt-1 truncate text-sm font-semibold">{user.subAccountName ?? "No sub account"}</div>
         </div>
-        <nav className="space-y-0.5">
-          {navItems.map((item) => (
-            <Link
-              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted transition hover:bg-background hover:text-foreground"
-              href={item.href}
-              key={item.href}
-            >
-              <item.icon size={17} />
-              {item.label}
-            </Link>
-          ))}
-        </nav>
+        <SidebarNav items={navItems} />
       </aside>
       <div className="lg:pl-[17rem]">
         <header className="sticky top-0 z-10 border-b border-border bg-panel/95 px-5 py-3 backdrop-blur">

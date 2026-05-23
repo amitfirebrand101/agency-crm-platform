@@ -5,20 +5,17 @@ import { z } from "zod";
 import { canWriteSubAccount, requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { auditLog } from "@/lib/security";
+import { appointmentSchema } from "@/lib/validation";
 
 async function requireWritableSubAccount() {
   const user = await requireUser();
-
   if (!user.subAccountId || !canWriteSubAccount(user.subAccountRole)) {
     throw new Error("You do not have permission to update this sub account.");
   }
-
   return user as typeof user & { subAccountId: string };
 }
 
-const nameSchema = z.object({
-  name: z.string().trim().min(2).max(120)
-});
+const nameSchema = z.object({ name: z.string().trim().min(2).max(120) });
 
 export async function createConversation(formData: FormData) {
   const user = await requireWritableSubAccount();
@@ -28,16 +25,9 @@ export async function createConversation(formData: FormData) {
       channel: z.enum(["SMS", "EMAIL", "CALL", "VOICEMAIL", "INTERNAL_NOTE"])
     })
     .parse(Object.fromEntries(formData));
-
   const conversation = await prisma.conversation.create({
-    data: {
-      agencyId: user.agencyId,
-      subAccountId: user.subAccountId,
-      channel: input.channel,
-      subject: input.subject || null
-    }
+    data: { agencyId: user.agencyId, subAccountId: user.subAccountId, channel: input.channel, subject: input.subject || null }
   });
-
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "Conversation", entityId: conversation.id });
   revalidatePath("/conversations");
 }
@@ -48,9 +38,49 @@ export async function createCalendar(formData: FormData) {
   const calendar = await prisma.calendar.create({
     data: { agencyId: user.agencyId, subAccountId: user.subAccountId, name: input.name }
   });
-
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "Calendar", entityId: calendar.id });
   revalidatePath("/calendars");
+}
+
+export async function createAppointment(formData: FormData) {
+  const user = await requireWritableSubAccount();
+  const input = appointmentSchema.parse(Object.fromEntries(formData));
+
+  const calendar = await prisma.calendar.findFirstOrThrow({
+    where: { id: input.calendarId, agencyId: user.agencyId, subAccountId: user.subAccountId }
+  });
+
+  const appointment = await prisma.appointment.create({
+    data: {
+      calendarId: calendar.id,
+      contactId: input.contactId || null,
+      title: input.title,
+      startsAt: new Date(input.startsAt),
+      endsAt: new Date(input.endsAt),
+      status: "scheduled"
+    }
+  });
+
+  await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "Appointment", entityId: appointment.id });
+  revalidatePath(`/calendars/${calendar.id}`);
+  revalidatePath("/calendars");
+}
+
+export async function updateAppointmentStatus(formData: FormData) {
+  const user = await requireWritableSubAccount();
+  const appointmentId = z.string().uuid().parse(String(formData.get("appointmentId") ?? ""));
+  const status = z.enum(["scheduled", "confirmed", "cancelled", "completed", "no_show"]).parse(String(formData.get("status") ?? ""));
+
+  const appointment = await prisma.appointment.findFirstOrThrow({
+    where: { id: appointmentId },
+    include: { calendar: true }
+  });
+
+  if (appointment.calendar.agencyId !== user.agencyId) throw new Error("Access denied.");
+
+  await prisma.appointment.update({ where: { id: appointmentId }, data: { status } });
+  await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "UPDATE", entityType: "Appointment", entityId: appointmentId });
+  revalidatePath(`/calendars/${appointment.calendarId}`);
 }
 
 export async function createPipeline(formData: FormData) {
@@ -61,16 +91,9 @@ export async function createPipeline(formData: FormData) {
       agencyId: user.agencyId,
       subAccountId: user.subAccountId,
       name: input.name,
-      stages: {
-        create: [
-          { name: "New", position: 1 },
-          { name: "Qualified", position: 2 },
-          { name: "Won", position: 3 }
-        ]
-      }
+      stages: { create: [{ name: "New", position: 1 }, { name: "Qualified", position: 2 }, { name: "Won", position: 3 }] }
     }
   });
-
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "Pipeline", entityId: pipeline.id });
   revalidatePath("/opportunities");
 }
@@ -84,7 +107,6 @@ export async function createOpportunity(formData: FormData) {
       value: z.coerce.number().min(0).default(0)
     })
     .parse(Object.fromEntries(formData));
-
   const opportunity = await prisma.opportunity.create({
     data: {
       agencyId: user.agencyId,
@@ -94,8 +116,35 @@ export async function createOpportunity(formData: FormData) {
       valueCents: Math.round(input.value * 100)
     }
   });
-
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "Opportunity", entityId: opportunity.id });
+  revalidatePath("/opportunities");
+}
+
+export async function moveOpportunityToStage(formData: FormData) {
+  const user = await requireWritableSubAccount();
+  const opportunityId = z.string().uuid().parse(String(formData.get("opportunityId") ?? ""));
+  const stageId = z.string().uuid().parse(String(formData.get("stageId") ?? ""));
+
+  const opp = await prisma.opportunity.findFirstOrThrow({
+    where: { id: opportunityId, agencyId: user.agencyId, subAccountId: user.subAccountId }
+  });
+
+  await prisma.opportunity.update({ where: { id: opp.id }, data: { stageId } });
+  await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "UPDATE", entityType: "Opportunity", entityId: opp.id, metadata: { stageId } });
+  revalidatePath("/opportunities");
+}
+
+export async function updateOpportunityStatus(formData: FormData) {
+  const user = await requireWritableSubAccount();
+  const opportunityId = z.string().uuid().parse(String(formData.get("opportunityId") ?? ""));
+  const status = z.enum(["OPEN", "WON", "LOST"]).parse(String(formData.get("status") ?? ""));
+
+  const opp = await prisma.opportunity.findFirstOrThrow({
+    where: { id: opportunityId, agencyId: user.agencyId, subAccountId: user.subAccountId }
+  });
+
+  await prisma.opportunity.update({ where: { id: opp.id }, data: { status } });
+  await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "UPDATE", entityType: "Opportunity", entityId: opp.id, metadata: { status } });
   revalidatePath("/opportunities");
 }
 
@@ -105,7 +154,6 @@ export async function createAutomation(formData: FormData) {
   const automation = await prisma.automation.create({
     data: { agencyId: user.agencyId, subAccountId: user.subAccountId, name: input.name }
   });
-
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "Automation", entityId: automation.id });
   revalidatePath("/automations");
 }
@@ -113,15 +161,11 @@ export async function createAutomation(formData: FormData) {
 export async function createSite(formData: FormData) {
   const user = await requireWritableSubAccount();
   const input = z
-    .object({
-      name: z.string().trim().min(2).max(120),
-      domain: z.string().trim().max(160).optional()
-    })
+    .object({ name: z.string().trim().min(2).max(120), domain: z.string().trim().max(160).optional() })
     .parse(Object.fromEntries(formData));
   const site = await prisma.site.create({
     data: { agencyId: user.agencyId, subAccountId: user.subAccountId, name: input.name, domain: input.domain || null }
   });
-
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "Site", entityId: site.id });
   revalidatePath("/sites");
 }
@@ -129,15 +173,11 @@ export async function createSite(formData: FormData) {
 export async function createMarketingCampaign(formData: FormData) {
   const user = await requireWritableSubAccount();
   const input = z
-    .object({
-      name: z.string().trim().min(2).max(120),
-      channel: z.string().trim().min(2).max(40)
-    })
+    .object({ name: z.string().trim().min(2).max(120), channel: z.string().trim().min(2).max(40) })
     .parse(Object.fromEntries(formData));
   const campaign = await prisma.marketingCampaign.create({
     data: { agencyId: user.agencyId, subAccountId: user.subAccountId, name: input.name, channel: input.channel }
   });
-
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "MarketingCampaign", entityId: campaign.id });
   revalidatePath("/marketing");
 }
@@ -145,10 +185,7 @@ export async function createMarketingCampaign(formData: FormData) {
 export async function createPhoneNumber(formData: FormData) {
   const user = await requireWritableSubAccount();
   const input = z
-    .object({
-      number: z.string().trim().min(7).max(32),
-      provider: z.string().trim().max(40).optional()
-    })
+    .object({ number: z.string().trim().min(7).max(32), provider: z.string().trim().max(40).optional() })
     .parse(Object.fromEntries(formData));
   const phoneNumber = await prisma.phoneNumber.create({
     data: {
@@ -158,7 +195,6 @@ export async function createPhoneNumber(formData: FormData) {
       provider: input.provider || "manual"
     }
   });
-
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "PhoneNumber", entityId: phoneNumber.id });
   revalidatePath("/calling");
   revalidatePath("/sms");
