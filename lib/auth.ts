@@ -13,6 +13,18 @@ const demoUser = {
   }
 };
 
+const demoSessionUser: SessionUser = {
+  id: demoUser.id,
+  name: demoUser.user_metadata.full_name,
+  email: demoUser.email,
+  agencyId: "00000000-0000-4000-8000-000000000010",
+  agencyName: "GoLowLevel Agency",
+  agencyRole: "OWNER",
+  subAccountId: "00000000-0000-4000-8000-000000000020",
+  subAccountName: "Primary Sub Account",
+  subAccountRole: "ADMIN"
+};
+
 export type SessionUser = {
   id: string;
   name: string | null;
@@ -54,107 +66,125 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     return null;
   }
 
-  await prisma.user.upsert({
-    where: { id: authUser.id },
-    update: {
-      email: authUser.email,
-      name: authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
-      imageUrl: authUser.user_metadata?.avatar_url ?? null
-    },
-    create: {
-      id: authUser.id,
-      email: authUser.email,
-      name: authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
-      imageUrl: authUser.user_metadata?.avatar_url ?? null
-    }
-  });
-
-  const membership = await prisma.agencyMembership.findFirst({
-    where: { userId: authUser.id },
-    orderBy: { createdAt: "asc" },
-    include: {
-      agency: {
-        include: {
-          subAccounts: {
-            orderBy: { createdAt: "asc" },
-            take: 1,
-            include: {
-              members: {
-                where: { userId: authUser.id },
-                take: 1
-              }
-            }
-          }
-        }
-      }
-    }
-  });
-
-  if (!membership) {
-    const slugBase = authUser.email.split("@")[0]?.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "agency";
-    const agency = await prisma.agency.create({
-      data: {
-        name: "GoLowLevel Agency",
-        slug: `${slugBase}-${authUser.id.slice(0, 8)}`,
-        members: {
-          create: {
-            userId: authUser.id,
-            role: "OWNER"
-          }
-        },
-        subAccounts: {
-          create: {
-            name: "Primary Sub Account",
-            slug: "primary",
-            members: {
-              create: {
-                userId: authUser.id,
-                role: "ADMIN"
-              }
-            }
-          }
-        }
+  try {
+    await prisma.user.upsert({
+      where: { id: authUser.id },
+      update: {
+        email: authUser.email,
+        name: authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
+        imageUrl: authUser.user_metadata?.avatar_url ?? null
       },
+      create: {
+        id: authUser.id,
+        email: authUser.email,
+        name: authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
+        imageUrl: authUser.user_metadata?.avatar_url ?? null
+      }
+    });
+  } catch (error) {
+    if (isAuthDisabled()) {
+      console.error("Demo auth database bootstrap failed", error);
+      return demoSessionUser;
+    }
+
+    throw error;
+  }
+
+  try {
+    const membership = await prisma.agencyMembership.findFirst({
+      where: { userId: authUser.id },
+      orderBy: { createdAt: "asc" },
       include: {
-        subAccounts: {
+        agency: {
           include: {
-            members: {
-              where: { userId: authUser.id }
+            subAccounts: {
+              orderBy: { createdAt: "asc" },
+              take: 1,
+              include: {
+                members: {
+                  where: { userId: authUser.id },
+                  take: 1
+                }
+              }
             }
           }
         }
       }
     });
 
-    const subAccount = agency.subAccounts[0] ?? null;
+    if (!membership) {
+      const slugBase = authUser.email.split("@")[0]?.toLowerCase().replace(/[^a-z0-9]+/g, "-") || "agency";
+      const agency = await prisma.agency.create({
+        data: {
+          name: "GoLowLevel Agency",
+          slug: `${slugBase}-${authUser.id.slice(0, 8)}`,
+          members: {
+            create: {
+              userId: authUser.id,
+              role: "OWNER"
+            }
+          },
+          subAccounts: {
+            create: {
+              name: "Primary Sub Account",
+              slug: "primary",
+              members: {
+                create: {
+                  userId: authUser.id,
+                  role: "ADMIN"
+                }
+              }
+            }
+          }
+        },
+        include: {
+          subAccounts: {
+            include: {
+              members: {
+                where: { userId: authUser.id }
+              }
+            }
+          }
+        }
+      });
+
+      const subAccount = agency.subAccounts[0] ?? null;
+
+      return {
+        id: authUser.id,
+        name: authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
+        email: authUser.email,
+        agencyId: agency.id,
+        agencyName: agency.name,
+        agencyRole: "OWNER",
+        subAccountId: subAccount?.id ?? null,
+        subAccountName: subAccount?.name ?? null,
+        subAccountRole: subAccount?.members[0]?.role ?? null
+      };
+    }
+
+    const subAccount = membership.agency.subAccounts[0] ?? null;
+    const subAccountMembership = subAccount?.members[0] ?? null;
 
     return {
       id: authUser.id,
       name: authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
       email: authUser.email,
-      agencyId: agency.id,
-      agencyName: agency.name,
-      agencyRole: "OWNER",
+      agencyId: membership.agencyId,
+      agencyName: membership.agency.name,
+      agencyRole: membership.role,
       subAccountId: subAccount?.id ?? null,
       subAccountName: subAccount?.name ?? null,
-      subAccountRole: subAccount?.members[0]?.role ?? null
+      subAccountRole: subAccountMembership?.role ?? null
     };
+  } catch (error) {
+    if (isAuthDisabled()) {
+      console.error("Demo auth membership lookup failed", error);
+      return demoSessionUser;
+    }
+
+    throw error;
   }
-
-  const subAccount = membership.agency.subAccounts[0] ?? null;
-  const subAccountMembership = subAccount?.members[0] ?? null;
-
-  return {
-    id: authUser.id,
-    name: authUser.user_metadata?.full_name ?? authUser.user_metadata?.name ?? null,
-    email: authUser.email,
-    agencyId: membership.agencyId,
-    agencyName: membership.agency.name,
-    agencyRole: membership.role,
-    subAccountId: subAccount?.id ?? null,
-    subAccountName: subAccount?.name ?? null,
-    subAccountRole: subAccountMembership?.role ?? null
-  };
 }
 
 export async function requireUser() {

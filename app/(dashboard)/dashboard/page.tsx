@@ -14,20 +14,43 @@ const moduleStats = [
 
 export default async function DashboardPage() {
   const user = await requireUser();
-  const [contactCount, subAccountCount, tagCount, recentContacts] = await Promise.all([
-    prisma.contact.count({ where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined } }),
-    prisma.subAccount.count({ where: { agencyId: user.agencyId } }),
-    prisma.tag.count({ where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined } }),
-    prisma.contact.findMany({
-      where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
-      orderBy: { createdAt: "desc" },
-      take: 5,
-      select: { id: true, firstName: true, lastName: true, email: true, source: true }
-    })
-  ]);
+  let databaseUnavailable = false;
+  let contactCount = 0;
+  let subAccountCount = 0;
+  let tagCount = 0;
+  let recentContacts: Array<{
+    id: string;
+    firstName: string;
+    lastName: string | null;
+    email: string | null;
+    source: string | null;
+  }> = [];
+
+  try {
+    [contactCount, subAccountCount, tagCount, recentContacts] = await Promise.all([
+      prisma.contact.count({ where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined } }),
+      prisma.subAccount.count({ where: { agencyId: user.agencyId } }),
+      prisma.tag.count({ where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined } }),
+      prisma.contact.findMany({
+        where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { id: true, firstName: true, lastName: true, email: true, source: true }
+      })
+    ]);
+  } catch (error) {
+    databaseUnavailable = true;
+    console.error("Dashboard database query failed", error);
+  }
 
   return (
     <div className="space-y-6">
+      {databaseUnavailable ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Database connection is not ready in this deployment. The app shell is available, but live CRM records will appear after Vercel can reach Supabase.
+        </div>
+      ) : null}
+
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard helper="Tenant-isolated CRM records." label="Contacts" value={String(contactCount)} />
         <StatCard helper="Client locations under this agency." label="Sub accounts" value={String(subAccountCount)} />
