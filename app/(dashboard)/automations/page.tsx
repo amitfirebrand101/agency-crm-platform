@@ -21,6 +21,15 @@ type AutomationsPageProps = {
 };
 
 export default async function AutomationsPage({ searchParams }: AutomationsPageProps) {
+  try {
+    return await AutomationsContent({ searchParams });
+  } catch (error) {
+    console.error("Automations page render failed", error);
+    return <AutomationsFallback />;
+  }
+}
+
+async function AutomationsContent({ searchParams }: AutomationsPageProps) {
   const params = await searchParams;
   const selectedId = params?.workflow;
   const user = await requireUser();
@@ -235,6 +244,74 @@ export default async function AutomationsPage({ searchParams }: AutomationsPageP
             </>
           ) : null}
         </div>
+      </section>
+    </div>
+  );
+}
+
+function AutomationsFallback() {
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-2xl font-semibold">Automations</h1>
+        <p className="mt-1 text-sm text-muted">
+          Build trigger-based workflows with sequential actions, draft/publish control, and manual test runs.
+        </p>
+      </div>
+      <DbWarning />
+      <section className="grid gap-6 xl:grid-cols-[19rem_1fr_22rem]">
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Bot className="text-primary" size={18} />
+              <h2 className="font-semibold">Workflows</h2>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <div className="text-sm text-muted">Workflows will load when the database connection is available.</div>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <Workflow className="text-primary" size={18} />
+              <h2 className="font-semibold">Workflow builder</h2>
+            </div>
+          </CardHeader>
+          <CardBody>
+            <div className="space-y-4">
+              <div className="rounded-md border border-dashed border-border p-4 text-sm text-muted">
+                Trigger catalog and action catalog are ready. Live workflow editing needs database access.
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {triggerCatalog.slice(0, 6).map((trigger) => (
+                  <div className="rounded-md border border-border bg-background p-3 text-sm" key={trigger.type}>
+                    <div className="font-medium">{trigger.label}</div>
+                    <div className="mt-1 text-xs text-muted">{trigger.category}</div>
+                  </div>
+                ))}
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                {actionCatalog.slice(0, 6).map((action) => (
+                  <div className="rounded-md border border-border bg-background p-3 text-sm" key={action.type}>
+                    <div className="font-medium">{action.label}</div>
+                    <div className="mt-1 text-xs text-muted">{action.category}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader>
+            <h2 className="font-semibold">Setup required</h2>
+          </CardHeader>
+          <CardBody>
+            <p className="text-sm leading-6 text-muted">
+              Check Vercel runtime logs for the digest and confirm `AUTH_DISABLED=true`, `DATABASE_URL`, and `DIRECT_URL` are valid.
+            </p>
+          </CardBody>
+        </Card>
       </section>
     </div>
   );
