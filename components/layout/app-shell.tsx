@@ -1,39 +1,10 @@
 import Link from "next/link";
-import {
-  Activity,
-  Bot,
-  Building2,
-  CalendarDays,
-  ContactRound,
-  GalleryVerticalEnd,
-  LayoutDashboard,
-  Megaphone,
-  MessageSquareText,
-  Moon,
-  PhoneCall,
-  Settings,
-  Target
-} from "lucide-react";
+import { Activity, Moon } from "lucide-react";
 import { signOut } from "@/app/(dashboard)/actions";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import type { SessionUser } from "@/lib/auth";
 
 const appName = process.env.NEXT_PUBLIC_APP_NAME?.replace(/^["']|["']$/g, "") ?? "GoLowLevel";
-
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/contacts", label: "Contacts", icon: ContactRound },
-  { href: "/conversations", label: "Conversations", icon: MessageSquareText },
-  { href: "/calendars", label: "Calendars", icon: CalendarDays },
-  { href: "/automations", label: "Automations", icon: Bot },
-  { href: "/opportunities", label: "Opportunities", icon: Target },
-  { href: "/sites", label: "Sites", icon: GalleryVerticalEnd },
-  { href: "/marketing", label: "Marketing", icon: Megaphone },
-  { href: "/calling", label: "Calling", icon: PhoneCall },
-  { href: "/sms", label: "SMS", icon: MessageSquareText },
-  { href: "/sub-accounts", label: "Sub accounts", icon: Building2 },
-  { href: "/settings", label: "Settings", icon: Settings }
-];
 
 type AppShellProps = {
   user: SessionUser;
@@ -57,7 +28,7 @@ export function AppShell({ user, children }: AppShellProps) {
           <div className="text-xs font-medium uppercase text-muted">Sub account</div>
           <div className="mt-1 truncate text-sm font-semibold">{user.subAccountName ?? "No sub account"}</div>
         </div>
-        <SidebarNav items={navItems} />
+        <SidebarNav />
       </aside>
       <div className="lg:pl-[17rem]">
         <header className="sticky top-0 z-10 border-b border-border bg-panel/95 px-5 py-3 backdrop-blur">
