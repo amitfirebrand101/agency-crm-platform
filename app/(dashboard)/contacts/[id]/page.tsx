@@ -1,8 +1,23 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, CalendarDays, MessageSquareText, Pencil, Tag, Target, Trash2 } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarDays,
+  Mail,
+  MessageSquare,
+  MessageSquareText,
+  Phone,
+  Tag,
+  Target,
+  Trash2
+} from "lucide-react";
 import type { Prisma } from "@prisma/client";
-import { assignTagToContact, deleteContact, removeTagFromContact, updateContact } from "@/app/(dashboard)/contacts/actions";
+import {
+  assignTagToContact,
+  deleteContact,
+  removeTagFromContact,
+  updateContact
+} from "@/app/(dashboard)/contacts/actions";
 import { Badge, statusVariant } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
@@ -20,6 +35,11 @@ type ContactDetail = Prisma.ContactGetPayload<{
   };
 }>;
 
+const AVATAR_COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ec4899", "#06b6d4", "#6366f1"];
+function avatarBg(name: string): string {
+  return AVATAR_COLORS[(name.charCodeAt(0) || 0) % AVATAR_COLORS.length];
+}
+
 export default async function ContactDetailPage({ params }: Props) {
   const { id } = await params;
   const user = await requireUser();
@@ -35,7 +55,11 @@ export default async function ContactDetailPage({ params }: Props) {
           tags: { include: { tag: true } },
           conversations: { orderBy: { createdAt: "desc" }, take: 10 },
           appointments: { orderBy: { startsAt: "desc" }, take: 10, include: { calendar: true } },
-          opportunities: { orderBy: { createdAt: "desc" }, take: 10, include: { stage: { include: { pipeline: true } } } }
+          opportunities: {
+            orderBy: { createdAt: "desc" },
+            take: 10,
+            include: { stage: { include: { pipeline: true } } }
+          }
         }
       }),
       prisma.tag.findMany({
@@ -51,64 +75,175 @@ export default async function ContactDetailPage({ params }: Props) {
 
   const assignedTagIds = new Set(contact.tags.map((ct) => ct.tagId));
   const availableTags = tags.filter((t) => !assignedTagIds.has(t.id));
+  const fullName = `${contact.firstName} ${contact.lastName ?? ""}`.trim();
+  const initial = fullName.charAt(0).toUpperCase();
+  const pipelineValue = contact.opportunities.reduce((s, o) => s + o.valueCents, 0) / 100;
+
+  const timelineItems: Array<{
+    id: string;
+    icon: React.ReactNode;
+    iconBg: string;
+    title: React.ReactNode;
+    sub: React.ReactNode;
+    meta: React.ReactNode;
+    date: Date;
+  }> = [
+    ...contact.conversations.map((conv) => ({
+      id: conv.id,
+      icon: <MessageSquareText size={14} />,
+      iconBg: "bg-blue-50 text-blue-600",
+      title: (
+        <Link className="text-sm font-medium hover:text-primary" href={`/conversations/${conv.id}`}>
+          {conv.subject ?? `${conv.channel} conversation`}
+        </Link>
+      ),
+      sub: (
+        <span className="text-xs text-muted">{conv.channel}</span>
+      ),
+      meta: <Badge variant={statusVariant(conv.status)}>{conv.status}</Badge>,
+      date: new Date(conv.createdAt)
+    })),
+    ...contact.appointments.map((apt) => ({
+      id: apt.id,
+      icon: <CalendarDays size={14} />,
+      iconBg: "bg-green-50 text-green-600",
+      title: <span className="text-sm font-medium">{apt.title}</span>,
+      sub: (
+        <span className="text-xs text-muted">
+          {apt.calendar.name} · {new Date(apt.startsAt).toLocaleString()}
+        </span>
+      ),
+      meta: <Badge variant={statusVariant(apt.status)}>{apt.status}</Badge>,
+      date: new Date(apt.startsAt)
+    })),
+    ...contact.opportunities.map((opp) => ({
+      id: opp.id,
+      icon: <Target size={14} />,
+      iconBg: "bg-amber-50 text-amber-600",
+      title: <span className="text-sm font-medium">{opp.name}</span>,
+      sub: (
+        <span className="text-xs text-muted">
+          {opp.stage.pipeline.name} → {opp.stage.name}
+        </span>
+      ),
+      meta: (
+        <div className="flex items-center gap-2">
+          <Badge variant={statusVariant(opp.status)}>{opp.status}</Badge>
+          <span className="text-xs font-semibold">${(opp.valueCents / 100).toLocaleString()}</span>
+        </div>
+      ),
+      date: new Date(opp.createdAt)
+    }))
+  ].sort((a, b) => b.date.getTime() - a.date.getTime());
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Link className="flex items-center gap-1.5 text-sm text-muted hover:text-foreground" href="/contacts">
-          <ArrowLeft size={15} />
-          Contacts
-        </Link>
-      </div>
+      {/* Back link */}
+      <Link className="inline-flex items-center gap-1.5 text-sm text-muted hover:text-foreground" href="/contacts">
+        <ArrowLeft size={15} />
+        Contacts
+      </Link>
 
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">
-            {contact.firstName} {contact.lastName ?? ""}
-          </h1>
-          {contact.companyName ? <p className="text-sm text-muted">{contact.companyName}</p> : null}
-        </div>
-        <Badge variant={statusVariant(contact.status)}>{contact.status}</Badge>
-      </div>
+      {/* Hero card */}
+      <Card>
+        <CardBody>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <div
+                className="flex size-16 shrink-0 items-center justify-center rounded-full text-xl font-bold text-white"
+                style={{ backgroundColor: avatarBg(fullName) }}
+              >
+                {initial}
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold">{fullName}</h1>
+                {contact.companyName ? (
+                  <p className="text-sm text-muted">{contact.companyName}</p>
+                ) : null}
+                <div className="mt-1">
+                  <Badge variant={statusVariant(contact.status)}>{contact.status}</Badge>
+                </div>
+              </div>
+            </div>
+            {/* Quick action buttons */}
+            <div className="flex items-center gap-2">
+              {contact.email ? (
+                <a
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium transition hover:bg-background"
+                  href={`mailto:${contact.email}`}
+                  title={`Email ${fullName}`}
+                >
+                  <Mail size={15} />
+                  Email
+                </a>
+              ) : null}
+              {contact.phone ? (
+                <a
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium transition hover:bg-background"
+                  href={`tel:${contact.phone}`}
+                  title={`Call ${fullName}`}
+                >
+                  <Phone size={15} />
+                  Call
+                </a>
+              ) : null}
+              {contact.phone ? (
+                <a
+                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium transition hover:bg-background"
+                  href={`tel:${contact.phone}`}
+                  title={`SMS ${fullName}`}
+                >
+                  <MessageSquare size={15} />
+                  SMS
+                </a>
+              ) : null}
+            </div>
+          </div>
+        </CardBody>
+      </Card>
 
-      <div className="grid gap-6 xl:grid-cols-[1fr_20rem]">
+      {/* Main two-column layout */}
+      <div className="grid gap-6 xl:grid-cols-[1fr_22rem]">
+        {/* Left column */}
         <div className="space-y-6">
-          {/* Edit contact */}
+          {/* Contact info edit form */}
           <Card>
             <CardHeader>
-              <div className="flex items-center gap-2">
-                <Pencil className="text-primary" size={16} />
-                <h2 className="font-semibold">Contact info</h2>
-              </div>
+              <h2 className="font-semibold">Contact info</h2>
             </CardHeader>
             <CardBody>
-              <form action={updateContact} className="space-y-3">
+              <form action={updateContact} className="space-y-4">
                 <input name="contactId" type="hidden" value={contact.id} />
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="First name" name="firstName" defaultValue={contact.firstName} required />
                   <Field label="Last name" name="lastName" defaultValue={contact.lastName ?? ""} />
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Email" name="email" type="email" defaultValue={contact.email ?? ""} />
                   <Field label="Phone" name="phone" type="tel" defaultValue={contact.phone ?? ""} />
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="Company" name="companyName" defaultValue={contact.companyName ?? ""} />
                   <Field label="Source" name="source" defaultValue={contact.source ?? ""} />
                 </div>
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">Status</span>
-                  <select className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" defaultValue={contact.status} name="status">
+                  <select
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-primary/20 focus:ring-4"
+                    defaultValue={contact.status}
+                    name="status"
+                  >
                     <option value="LEAD">Lead</option>
                     <option value="CUSTOMER">Customer</option>
                     <option value="INACTIVE">Inactive</option>
                   </select>
                 </label>
-                <div className="flex gap-3">
-                  <button className="flex-1 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white" type="submit">
-                    Save changes
-                  </button>
-                </div>
+                <button
+                  className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+                  type="submit"
+                >
+                  Save changes
+                </button>
               </form>
             </CardBody>
           </Card>
@@ -119,59 +254,40 @@ export default async function ContactDetailPage({ params }: Props) {
               <h2 className="font-semibold">Activity timeline</h2>
             </CardHeader>
             <CardBody>
-              <div className="space-y-4">
-                {contact.conversations.map((conv) => (
-                  <div className="flex items-start gap-3" key={conv.id}>
-                    <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-blue-600">
-                      <MessageSquareText size={14} />
-                    </div>
-                    <div>
-                      <Link className="text-sm font-medium hover:text-primary" href={`/conversations/${conv.id}`}>
-                        {conv.subject ?? `${conv.channel} conversation`}
-                      </Link>
-                      <div className="flex gap-2">
-                        <Badge variant={statusVariant(conv.status)}>{conv.status}</Badge>
-                        <span className="text-xs text-muted">{conv.channel}</span>
+              {timelineItems.length === 0 ? (
+                <p className="text-sm text-muted">No activity recorded yet.</p>
+              ) : (
+                <div className="relative space-y-0">
+                  {/* Vertical connecting line */}
+                  <div className="absolute left-[19px] top-4 bottom-4 w-px bg-border" />
+                  {timelineItems.map((item, idx) => (
+                    <div className="relative flex items-start gap-4 py-3" key={`${item.id}-${idx}`}>
+                      <div
+                        className={`relative z-10 mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-full border border-border bg-panel ${item.iconBg}`}
+                      >
+                        {item.icon}
                       </div>
-                      <p className="text-xs text-muted">{new Date(conv.createdAt).toLocaleString()}</p>
-                    </div>
-                  </div>
-                ))}
-                {contact.appointments.map((apt) => (
-                  <div className="flex items-start gap-3" key={apt.id}>
-                    <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-green-50 text-green-600">
-                      <CalendarDays size={14} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{apt.title}</p>
-                      <p className="text-xs text-muted">{apt.calendar.name} · {new Date(apt.startsAt).toLocaleString()}</p>
-                      <Badge variant={statusVariant(apt.status)}>{apt.status}</Badge>
-                    </div>
-                  </div>
-                ))}
-                {contact.opportunities.map((opp) => (
-                  <div className="flex items-start gap-3" key={opp.id}>
-                    <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-amber-50 text-amber-600">
-                      <Target size={14} />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium">{opp.name}</p>
-                      <p className="text-xs text-muted">{opp.stage.pipeline.name} → {opp.stage.name}</p>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={statusVariant(opp.status)}>{opp.status}</Badge>
-                        <span className="text-xs font-semibold">${(opp.valueCents / 100).toLocaleString()}</span>
+                      <div className="min-w-0 flex-1 pt-1">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div className="space-y-0.5">
+                            {item.title}
+                            <div>{item.sub}</div>
+                          </div>
+                          <div className="flex flex-col items-end gap-1">
+                            {item.meta}
+                            <span className="text-xs text-muted">{item.date.toLocaleDateString()}</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
-                {!contact.conversations.length && !contact.appointments.length && !contact.opportunities.length ? (
-                  <p className="text-sm text-muted">No activity recorded yet.</p>
-                ) : null}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardBody>
           </Card>
         </div>
 
+        {/* Right column */}
         <div className="space-y-4">
           {/* Tags */}
           <Card>
@@ -182,34 +298,44 @@ export default async function ContactDetailPage({ params }: Props) {
               </div>
             </CardHeader>
             <CardBody>
-              <div className="flex flex-wrap gap-2">
-                {contact.tags.map(({ tag, tagId }) => (
-                  <form action={removeTagFromContact} key={tagId}>
-                    <input name="contactId" type="hidden" value={contact!.id} />
-                    <input name="tagId" type="hidden" value={tagId} />
-                    <button
-                      className="flex items-center gap-1 rounded px-2 py-0.5 text-xs font-semibold text-white transition hover:opacity-80"
-                      style={{ backgroundColor: tag.color }}
-                      title="Remove tag"
-                      type="submit"
-                    >
-                      {tag.name} ×
-                    </button>
-                  </form>
-                ))}
-                {!contact.tags.length ? <p className="text-sm text-muted">No tags assigned.</p> : null}
-              </div>
+              {contact.tags.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {contact.tags.map(({ tag, tagId }) => (
+                    <form action={removeTagFromContact} key={tagId}>
+                      <input name="contactId" type="hidden" value={contact!.id} />
+                      <input name="tagId" type="hidden" value={tagId} />
+                      <button
+                        className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white transition hover:opacity-75"
+                        style={{ backgroundColor: tag.color }}
+                        title="Remove tag"
+                        type="submit"
+                      >
+                        {tag.name}
+                        <span className="text-[10px] leading-none opacity-80">×</span>
+                      </button>
+                    </form>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted">No tags assigned.</p>
+              )}
               {availableTags.length > 0 ? (
-                <form action={assignTagToContact} className="mt-3 flex gap-2">
+                <form action={assignTagToContact} className="mt-4 flex gap-2">
                   <input name="contactId" type="hidden" value={contact.id} />
-                  <select className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm" name="tagId">
+                  <select
+                    className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm outline-none ring-primary/20 focus:ring-4"
+                    name="tagId"
+                  >
                     {availableTags.map((tag) => (
                       <option key={tag.id} value={tag.id}>
                         {tag.name}
                       </option>
                     ))}
                   </select>
-                  <button className="rounded-md border border-border px-3 py-1.5 text-sm font-medium" type="submit">
+                  <button
+                    className="rounded-md border border-border px-3 py-1.5 text-sm font-semibold transition hover:bg-background"
+                    type="submit"
+                  >
                     Add
                   </button>
                 </form>
@@ -217,43 +343,42 @@ export default async function ContactDetailPage({ params }: Props) {
             </CardBody>
           </Card>
 
-          {/* Quick stats */}
+          {/* Contact stats */}
           <Card>
+            <CardHeader>
+              <h2 className="font-semibold">Contact stats</h2>
+            </CardHeader>
             <CardBody>
-              <dl className="space-y-3 text-sm">
-                <div className="flex justify-between">
+              <dl className="divide-y divide-border text-sm">
+                <div className="flex items-center justify-between py-2.5">
                   <dt className="text-muted">Conversations</dt>
                   <dd className="font-semibold">{contact.conversations.length}</dd>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-center justify-between py-2.5">
                   <dt className="text-muted">Appointments</dt>
                   <dd className="font-semibold">{contact.appointments.length}</dd>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-center justify-between py-2.5">
                   <dt className="text-muted">Opportunities</dt>
                   <dd className="font-semibold">{contact.opportunities.length}</dd>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-center justify-between py-2.5">
                   <dt className="text-muted">Pipeline value</dt>
-                  <dd className="font-semibold">
-                    ${contact.opportunities.reduce((s, o) => s + o.valueCents, 0) / 100 >= 1
-                      ? (contact.opportunities.reduce((s, o) => s + o.valueCents, 0) / 100).toLocaleString()
-                      : "0"}
-                  </dd>
+                  <dd className="font-semibold">${pipelineValue.toLocaleString()}</dd>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-center justify-between py-2.5">
                   <dt className="text-muted">Source</dt>
                   <dd className="font-semibold">{contact.source ?? "Direct"}</dd>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-center justify-between py-2.5">
                   <dt className="text-muted">Created</dt>
                   <dd className="font-semibold">{new Date(contact.createdAt).toLocaleDateString()}</dd>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-center justify-between py-2.5">
                   <dt className="text-muted">Opt-out email</dt>
                   <dd className="font-semibold">{contact.emailOptOut ? "Yes" : "No"}</dd>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex items-center justify-between py-2.5">
                   <dt className="text-muted">Opt-out SMS</dt>
                   <dd className="font-semibold">{contact.smsOptOut ? "Yes" : "No"}</dd>
                 </div>

@@ -30,7 +30,7 @@ export async function sendMessage(formData: FormData) {
     }
   });
 
-  revalidatePath(`/conversations/${conversation.id}`);
+  revalidatePath("/conversations");
 }
 
 export async function updateConversationStatus(formData: FormData) {
@@ -43,6 +43,5 @@ export async function updateConversationStatus(formData: FormData) {
     data: { status }
   });
 
-  revalidatePath(`/conversations/${conversation.id}`);
   revalidatePath("/conversations");
 }
