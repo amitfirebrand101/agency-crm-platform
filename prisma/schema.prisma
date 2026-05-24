@@ -140,6 +140,10 @@ model SubAccount {
   calendars     Calendar[]
   automations   Automation[]
   sites         Site[]
+  funnels       Funnel[]
+  siteForms     SiteForm[]
+  surveys       Survey[]
+  blogPosts     BlogPost[]
   campaigns     MarketingCampaign[]
   phoneNumbers  PhoneNumber[]
 
@@ -415,6 +419,141 @@ model Site {
   subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
 
   @@index([agencyId, subAccountId])
+}
+
+model Funnel {
+  id           String             @id @default(uuid()) @db.Uuid
+  agencyId     String             @db.Uuid
+  subAccountId String             @db.Uuid
+  name         String
+  description  String?
+  domain       String?
+  favicon      String?
+  status       String             @default("draft")
+  type         String             @default("funnel")
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  subAccount   SubAccount         @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  pages        FunnelPage[]
+  submissions  FunnelSubmission[]
+
+  @@index([agencyId, subAccountId])
+}
+
+model FunnelPage {
+  id          String             @id @default(uuid()) @db.Uuid
+  funnelId    String             @db.Uuid
+  name        String
+  pathSlug    String
+  order       Int                @default(0)
+  type        String             @default("sales")
+  content     Json?
+  visits      Int                @default(0)
+  conversions Int                @default(0)
+  splitTest   Json?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  funnel      Funnel             @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  submissions FunnelSubmission[]
+
+  @@index([funnelId])
+}
+
+model FunnelSubmission {
+  id        String      @id @default(uuid()) @db.Uuid
+  funnelId  String      @db.Uuid
+  pageId    String?     @db.Uuid
+  contactId String?     @db.Uuid
+  data      Json
+  sourceUrl String?
+  ipAddress String?
+  createdAt DateTime    @default(now())
+  funnel    Funnel      @relation(fields: [funnelId], references: [id], onDelete: Cascade)
+  page      FunnelPage? @relation(fields: [pageId], references: [id], onDelete: SetNull)
+
+  @@index([funnelId])
+  @@index([pageId])
+}
+
+model SiteForm {
+  id           String           @id @default(uuid()) @db.Uuid
+  agencyId     String           @db.Uuid
+  subAccountId String           @db.Uuid
+  name         String
+  fields       Json             @default("[]")
+  settings     Json             @default("{}")
+  status       String           @default("active")
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  subAccount   SubAccount       @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  submissions  FormSubmission[]
+
+  @@index([agencyId, subAccountId])
+}
+
+model FormSubmission {
+  id        String   @id @default(uuid()) @db.Uuid
+  formId    String   @db.Uuid
+  contactId String?  @db.Uuid
+  data      Json
+  ipAddress String?
+  createdAt DateTime @default(now())
+  form      SiteForm @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId])
+}
+
+model Survey {
+  id           String           @id @default(uuid()) @db.Uuid
+  agencyId     String           @db.Uuid
+  subAccountId String           @db.Uuid
+  name         String
+  questions    Json             @default("[]")
+  settings     Json             @default("{}")
+  status       String           @default("active")
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  subAccount   SubAccount       @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  responses    SurveyResponse[]
+
+  @@index([agencyId, subAccountId])
+}
+
+model SurveyResponse {
+  id        String   @id @default(uuid()) @db.Uuid
+  surveyId  String   @db.Uuid
+  contactId String?  @db.Uuid
+  answers   Json
+  ipAddress String?
+  createdAt DateTime @default(now())
+  survey    Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+
+  @@index([surveyId])
+}
+
+model BlogPost {
+  id           String     @id @default(uuid()) @db.Uuid
+  agencyId     String     @db.Uuid
+  subAccountId String     @db.Uuid
+  siteId       String?    @db.Uuid
+  title        String
+  slug         String
+  content      String?    @db.Text
+  excerpt      String?
+  author       String?
+  category     String?
+  tags         String[]   @default([])
+  coverImage   String?
+  status       String     @default("draft")
+  publishedAt  DateTime?
+  seoTitle     String?
+  seoDesc      String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId, subAccountId])
+  @@index([siteId])
 }
 
 model MarketingCampaign {
