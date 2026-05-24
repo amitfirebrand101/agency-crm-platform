@@ -2,21 +2,42 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  Bot,
+  Building2,
+  CalendarDays,
+  ContactRound,
+  GalleryVerticalEnd,
+  LayoutDashboard,
+  Megaphone,
+  MessageSquareText,
+  PhoneCall,
+  Settings,
+  Target
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
-type NavItem = {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  href: any;
-  label: string;
-  icon: React.ElementType;
-};
+const navItems = [
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/contacts", label: "Contacts", icon: ContactRound },
+  { href: "/conversations", label: "Conversations", icon: MessageSquareText },
+  { href: "/calendars", label: "Calendars", icon: CalendarDays },
+  { href: "/automations", label: "Automations", icon: Bot },
+  { href: "/opportunities", label: "Opportunities", icon: Target },
+  { href: "/sites", label: "Sites", icon: GalleryVerticalEnd },
+  { href: "/marketing", label: "Marketing", icon: Megaphone },
+  { href: "/calling", label: "Calling", icon: PhoneCall },
+  { href: "/sms", label: "SMS", icon: MessageSquareText },
+  { href: "/sub-accounts", label: "Sub accounts", icon: Building2 },
+  { href: "/settings", label: "Settings", icon: Settings }
+] as const;
 
-export function SidebarNav({ items }: { items: NavItem[] }) {
+export function SidebarNav() {
   const pathname = usePathname();
 
   return (
     <nav className="space-y-0.5">
-      {items.map((item) => {
+      {navItems.map((item) => {
         const active = pathname === item.href || pathname.startsWith(item.href + "/");
         return (
           <Link
