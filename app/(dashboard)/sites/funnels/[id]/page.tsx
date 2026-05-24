@@ -5,6 +5,7 @@ import { addFunnelStep, updateFunnel, publishFunnel, unpublishFunnel } from "@/a
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { StepReorder } from "./step-reorder";
@@ -84,16 +85,16 @@ export default async function FunnelDetailPage({ params }: { params: Promise<{ i
           {funnel.status === "published" ? (
             <form action={unpublishFunnel}>
               <input type="hidden" name="funnelId" value={funnel.id} />
-              <button className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-background transition" type="submit">
+              <SubmitButton className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium hover:bg-background transition" pendingText="Unpublishing…">
                 Unpublish
-              </button>
+              </SubmitButton>
             </form>
           ) : (
             <form action={publishFunnel}>
               <input type="hidden" name="funnelId" value={funnel.id} />
-              <button className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 transition" type="submit">
+              <SubmitButton className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 transition" pendingText="Publishing…">
                 <Zap size={13} /> Publish
-              </button>
+              </SubmitButton>
             </form>
           )}
         </div>
@@ -161,9 +162,9 @@ export default async function FunnelDetailPage({ params }: { params: Promise<{ i
                   </div>
                 </div>
                 <div className="sm:col-span-2">
-                  <button className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" type="submit">
+                  <SubmitButton className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" pendingText="Adding…">
                     Add Step
-                  </button>
+                  </SubmitButton>
                 </div>
               </form>
             </CardBody>
@@ -186,9 +187,9 @@ export default async function FunnelDetailPage({ params }: { params: Promise<{ i
                 <Field label="Name" name="name" defaultValue={funnel.name} required />
                 <Field label="Custom Domain" name="domain" defaultValue={funnel.domain ?? ""} placeholder="funnel.yourdomain.com" />
                 <Field label="Description" name="description" defaultValue={funnel.description ?? ""} placeholder="What this funnel does..." />
-                <button className="w-full rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-background transition" type="submit">
+                <SubmitButton className="w-full rounded-md border border-border px-3 py-1.5 text-sm font-medium hover:bg-background transition" pendingText="Saving…">
                   Save Settings
-                </button>
+                </SubmitButton>
               </form>
             </CardBody>
           </Card>

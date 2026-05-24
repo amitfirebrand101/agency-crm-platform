@@ -5,6 +5,7 @@ import { Badge, statusVariant } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { DbWarning } from "@/components/ui/db-warning";
 import { Field } from "@/components/ui/field";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -286,12 +287,12 @@ export default async function OpportunitiesPage({
                                     </option>
                                   ))}
                                 </select>
-                                <button
+                                <SubmitButton
                                   className="shrink-0 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-semibold hover:bg-primary hover:text-white hover:border-primary transition"
-                                  type="submit"
+                                  pendingText="Moving…"
                                 >
                                   Move
-                                </button>
+                                </SubmitButton>
                               </form>
                             ) : null}
 
@@ -301,22 +302,22 @@ export default async function OpportunitiesPage({
                                 <form action={updateOpportunityStatus} className="flex-1">
                                   <input name="opportunityId" type="hidden" value={opp.id} />
                                   <input name="status" type="hidden" value="WON" />
-                                  <button
+                                  <SubmitButton
                                     className="w-full rounded-md border border-green-200 bg-green-50 px-2 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-100 transition"
-                                    type="submit"
+                                    pendingText="Saving…"
                                   >
                                     Won
-                                  </button>
+                                  </SubmitButton>
                                 </form>
                                 <form action={updateOpportunityStatus} className="flex-1">
                                   <input name="opportunityId" type="hidden" value={opp.id} />
                                   <input name="status" type="hidden" value="LOST" />
-                                  <button
+                                  <SubmitButton
                                     className="w-full rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition"
-                                    type="submit"
+                                    pendingText="Saving…"
                                   >
                                     Lost
-                                  </button>
+                                  </SubmitButton>
                                 </form>
                               </div>
                             ) : null}
@@ -360,12 +361,12 @@ export default async function OpportunitiesPage({
           <CardBody>
             <form action={createPipeline} className="space-y-3">
               <Field label="Name" name="name" placeholder="Main sales pipeline" required />
-              <button
+              <SubmitButton
                 className="w-full rounded-md border border-border px-3 py-2 text-sm font-semibold hover:bg-background transition"
-                type="submit"
+                pendingText="Creating…"
               >
                 Create pipeline
-              </button>
+              </SubmitButton>
             </form>
           </CardBody>
         </Card>
@@ -397,13 +398,13 @@ export default async function OpportunitiesPage({
                   ))}
                 </select>
               </label>
-              <button
+              <SubmitButton
                 className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white disabled:opacity-50 hover:opacity-90 transition"
                 disabled={!allStages.length}
-                type="submit"
+                pendingText="Creating…"
               >
                 Create opportunity
-              </button>
+              </SubmitButton>
             </form>
           </CardBody>
         </Card>

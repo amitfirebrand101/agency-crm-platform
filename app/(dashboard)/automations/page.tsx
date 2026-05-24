@@ -5,6 +5,7 @@ import { createWorkflow, duplicateWorkflow } from "@/app/(dashboard)/automations
 import { Badge, statusVariant } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { DbWarning } from "@/components/ui/db-warning";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -56,13 +57,13 @@ async function AutomationsContent() {
           </p>
         </div>
         <form action={createWorkflow}>
-          <button
+          <SubmitButton
             className="flex items-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition"
-            type="submit"
+            pendingText="Creating…"
           >
             <Plus size={15} />
             New Workflow
-          </button>
+          </SubmitButton>
         </form>
       </div>
 
@@ -135,12 +136,12 @@ async function AutomationsContent() {
                   <div className="flex shrink-0 items-center gap-2">
                     <form action={duplicateWorkflow}>
                       <input name="automationId" type="hidden" value={automation.id} />
-                      <button
+                      <SubmitButton
                         className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-background hover:text-foreground transition"
-                        type="submit"
+                        pendingText="Duplicating…"
                       >
                         Duplicate
-                      </button>
+                      </SubmitButton>
                     </form>
                     <Link
                       className="flex items-center gap-1 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition"
@@ -163,13 +164,13 @@ async function AutomationsContent() {
               <p className="font-semibold text-foreground">No workflows yet</p>
               <p className="mt-1 text-sm text-muted">Click &ldquo;New Workflow&rdquo; to build your first automation.</p>
               <form action={createWorkflow} className="mt-5 inline-block">
-                <button
+                <SubmitButton
                   className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition"
-                  type="submit"
+                  pendingText="Creating…"
                 >
                   <Plus size={15} />
                   Create first workflow
-                </button>
+                </SubmitButton>
               </form>
             </div>
           </CardBody>

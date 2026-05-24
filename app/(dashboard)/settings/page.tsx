@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { DbWarning } from "@/components/ui/db-warning";
 import { Field } from "@/components/ui/field";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { updateAgency } from "@/app/(dashboard)/settings/actions";
@@ -121,9 +122,9 @@ export default async function SettingsPage() {
                   <Field label="Currency" name="currency" defaultValue={agency.currency} placeholder="USD" />
                 </div>
                 <Field label="Country (2-letter)" name="country" defaultValue={agency.country} placeholder="US" />
-                <button className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white" type="submit">
+                <SubmitButton className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white" pendingText="Saving…">
                   Save changes
-                </button>
+                </SubmitButton>
               </form>
             </CardBody>
           </Card>

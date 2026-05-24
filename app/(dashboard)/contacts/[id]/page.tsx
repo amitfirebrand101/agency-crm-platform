@@ -21,6 +21,7 @@ import {
 import { Badge, statusVariant } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -238,12 +239,12 @@ export default async function ContactDetailPage({ params }: Props) {
                     <option value="INACTIVE">Inactive</option>
                   </select>
                 </label>
-                <button
+                <SubmitButton
                   className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-                  type="submit"
+                  pendingText="Saving…"
                 >
                   Save changes
-                </button>
+                </SubmitButton>
               </form>
             </CardBody>
           </Card>
@@ -304,15 +305,15 @@ export default async function ContactDetailPage({ params }: Props) {
                     <form action={removeTagFromContact} key={tagId}>
                       <input name="contactId" type="hidden" value={contact!.id} />
                       <input name="tagId" type="hidden" value={tagId} />
-                      <button
+                      <SubmitButton
                         className="flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white transition hover:opacity-75"
                         style={{ backgroundColor: tag.color }}
                         title="Remove tag"
-                        type="submit"
+                        pendingText="Removing…"
                       >
                         {tag.name}
                         <span className="text-[10px] leading-none opacity-80">×</span>
-                      </button>
+                      </SubmitButton>
                     </form>
                   ))}
                 </div>
@@ -332,12 +333,12 @@ export default async function ContactDetailPage({ params }: Props) {
                       </option>
                     ))}
                   </select>
-                  <button
+                  <SubmitButton
                     className="rounded-md border border-border px-3 py-1.5 text-sm font-semibold transition hover:bg-background"
-                    type="submit"
+                    pendingText="Adding…"
                   >
                     Add
-                  </button>
+                  </SubmitButton>
                 </form>
               ) : null}
             </CardBody>
@@ -392,13 +393,13 @@ export default async function ContactDetailPage({ params }: Props) {
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted">Danger zone</p>
               <form action={deleteContact}>
                 <input name="contactId" type="hidden" value={contact.id} />
-                <button
+                <SubmitButton
                   className="flex w-full items-center justify-center gap-2 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 transition hover:bg-red-100"
-                  type="submit"
+                  pendingText="Deleting…"
                 >
                   <Trash2 size={15} />
                   Delete contact
-                </button>
+                </SubmitButton>
               </form>
             </CardBody>
           </Card>

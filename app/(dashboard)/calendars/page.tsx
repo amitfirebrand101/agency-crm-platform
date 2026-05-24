@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { DbWarning } from "@/components/ui/db-warning";
 import { Field } from "@/components/ui/field";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -156,12 +157,12 @@ export default async function CalendarsPage() {
           <CardBody>
             <form action={createCalendar} className="space-y-3">
               <Field label="Name" name="name" placeholder="Sales calls" required />
-              <button
+              <SubmitButton
                 className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary/90"
-                type="submit"
+                pendingText="Creating…"
               >
                 Create calendar
-              </button>
+              </SubmitButton>
             </form>
           </CardBody>
         </Card>

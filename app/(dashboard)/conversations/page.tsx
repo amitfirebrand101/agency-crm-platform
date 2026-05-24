@@ -5,6 +5,7 @@ import { createConversation } from "@/app/(dashboard)/module-actions";
 import { Badge, statusVariant } from "@/components/ui/badge";
 import { DbWarning } from "@/components/ui/db-warning";
 import { Field } from "@/components/ui/field";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -201,12 +202,12 @@ export default async function ConversationsPage({
                       <option value="INTERNAL_NOTE">Internal note</option>
                     </select>
                   </label>
-                  <button
+                  <SubmitButton
                     className="w-full rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-white"
-                    type="submit"
+                    pendingText="Creating…"
                   >
                     Create thread
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
             </details>
@@ -344,16 +345,16 @@ export default async function ConversationsPage({
                     <form action={updateConversationStatus} key={s}>
                       <input name="conversationId" type="hidden" value={active!.id} />
                       <input name="status" type="hidden" value={s} />
-                      <button
+                      <SubmitButton
                         className={`rounded px-2 py-1 text-xs font-semibold transition ${
                           active!.status === s
                             ? "bg-primary/10 text-primary"
                             : "border border-border text-muted hover:text-foreground"
                         }`}
-                        type="submit"
+                        pendingText="Saving…"
                       >
                         {s === "OPEN" ? "Open" : s === "PENDING" ? "Pending" : "Closed"}
-                      </button>
+                      </SubmitButton>
                     </form>
                   ))}
                 </div>
@@ -426,13 +427,13 @@ export default async function ConversationsPage({
                     <option value="inbound">Inbound</option>
                     <option value="internal">Internal note</option>
                   </select>
-                  <button
+                  <SubmitButton
                     className="flex flex-1 items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white"
-                    type="submit"
+                    pendingText="Sending…"
                   >
                     <Send size={14} />
                     Send
-                  </button>
+                  </SubmitButton>
                 </div>
               </form>
             </div>

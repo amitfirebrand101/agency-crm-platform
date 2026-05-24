@@ -6,6 +6,7 @@ import { createAppointment, updateAppointmentStatus } from "@/app/(dashboard)/mo
 import { Badge, statusVariant } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { MonthGrid } from "./month-grid";
@@ -147,16 +148,16 @@ export default async function CalendarDetailPage({ params }: Props) {
                         <form action={updateAppointmentStatus} key={s}>
                           <input name="appointmentId" type="hidden" value={apt.id} />
                           <input name="status" type="hidden" value={s} />
-                          <button
+                          <SubmitButton
                             className={`rounded px-2 py-0.5 text-xs font-medium transition ${
                               apt.status === s
                                 ? "bg-primary text-white"
                                 : "border border-border hover:bg-background"
                             }`}
-                            type="submit"
+                            pendingText="Saving…"
                           >
                             {s.replace("_", " ")}
-                          </button>
+                          </SubmitButton>
                         </form>
                       ))}
                     </div>
@@ -224,12 +225,12 @@ export default async function CalendarDetailPage({ params }: Props) {
                     type="datetime-local"
                   />
                 </label>
-                <button
+                <SubmitButton
                   className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:bg-primary/90"
-                  type="submit"
+                  pendingText="Booking…"
                 >
                   Book appointment
-                </button>
+                </SubmitButton>
               </form>
             </CardBody>
           </Card>

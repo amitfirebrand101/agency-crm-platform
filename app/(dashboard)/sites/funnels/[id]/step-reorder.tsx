@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { ArrowRight, GripVertical, Pencil, Trash2, TrendingUp, MousePointerClick, X, Check } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, GripVertical, LayoutTemplate, Pencil, Trash2, TrendingUp, MousePointerClick, X, Check } from "lucide-react";
 import { deleteFunnelStep, reorderFunnelSteps, updateFunnelStep } from "@/app/(dashboard)/sites/actions";
 
 interface PageRow {
@@ -26,7 +27,7 @@ const TYPE_COLORS: Record<string, string> = {
 
 const PAGE_TYPES = ["opt-in", "sales", "upsell", "downsell", "confirmation", "checkout", "custom"];
 
-export function StepReorder({ funnelId, pages }: { funnelId: string; pages: PageRow[] }) {
+export function StepReorder({ funnelId, pages }: { funnelId: string; pages: PageRow[]; }) {
   const [items, setItems] = useState(pages);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
@@ -179,6 +180,13 @@ export function StepReorder({ funnelId, pages }: { funnelId: string; pages: Page
                   </>
                 ) : (
                   <>
+                    <Link
+                      href={`/sites/funnels/${funnelId}/builder?page=${page.id}`}
+                      className="flex items-center gap-1 rounded-lg bg-primary/10 px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <LayoutTemplate size={11} /> Build
+                    </Link>
                     <button onClick={() => startEdit(page)} className="flex size-7 items-center justify-center rounded-lg hover:bg-background text-muted hover:text-foreground transition" type="button">
                       <Pencil size={13} />
                     </button>

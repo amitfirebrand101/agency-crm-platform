@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { DbWarning } from "@/components/ui/db-warning";
 import { Field } from "@/components/ui/field";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -183,9 +184,9 @@ function FunnelsTab({ funnels, totalSubmissions }: { funnels: FunnelWithCounts[]
             <Field label="Funnel Name" name="name" placeholder="Lead capture funnel" required />
             <Field label="Custom Domain" name="domain" placeholder="funnel.yourdomain.com" />
             <Field label="Description" name="description" placeholder="Optional description..." />
-            <button className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" type="submit">
+            <SubmitButton className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" pendingText="Creating…">
               Create Funnel
-            </button>
+            </SubmitButton>
           </form>
         </CardBody>
       </Card>
@@ -248,9 +249,9 @@ function FunnelCard({ funnel }: { funnel: FunnelWithCounts }) {
           <div className="flex items-center gap-1.5">
             <form action={deleteFunnel}>
               <input type="hidden" name="funnelId" value={funnel.id} />
-              <button className="rounded px-2 py-1 text-[11px] text-muted hover:bg-red-50 hover:text-red-600 transition" type="submit">
+              <SubmitButton className="rounded px-2 py-1 text-[11px] text-muted hover:bg-red-50 hover:text-red-600 transition" pendingText="Deleting…">
                 Delete
-              </button>
+              </SubmitButton>
             </form>
             <Link
               href={`/sites/funnels/${funnel.id}`}
@@ -293,7 +294,7 @@ function WebsitesTab({ websites }: { websites: FunnelWithCounts[] }) {
                     <div className="flex items-center gap-1.5">
                       <form action={deleteFunnel}>
                         <input type="hidden" name="funnelId" value={w.id} />
-                        <button className="rounded px-2 py-1 text-[11px] text-muted hover:bg-red-50 hover:text-red-600 transition" type="submit">Delete</button>
+                        <SubmitButton className="rounded px-2 py-1 text-[11px] text-muted hover:bg-red-50 hover:text-red-600 transition" pendingText="Deleting…">Delete</SubmitButton>
                       </form>
                       <Link href={`/sites/funnels/${w.id}`} className="flex items-center gap-0.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition">
                         Edit <ChevronRight size={12} />
@@ -322,9 +323,9 @@ function WebsitesTab({ websites }: { websites: FunnelWithCounts[] }) {
             <Field label="Website Name" name="name" placeholder="Company website" required />
             <Field label="Custom Domain" name="domain" placeholder="www.yourdomain.com" />
             <Field label="Description" name="description" placeholder="Optional description..." />
-            <button className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" type="submit">
+            <SubmitButton className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" pendingText="Creating…">
               Create Website
-            </button>
+            </SubmitButton>
           </form>
         </CardBody>
       </Card>
@@ -371,7 +372,7 @@ function FormsTab({ forms }: { forms: FormWithCount[] }) {
                     <div className="flex shrink-0 items-center gap-1.5">
                       <form action={deleteForm}>
                         <input type="hidden" name="formId" value={f.id} />
-                        <button className="rounded px-2 py-1 text-[11px] text-muted hover:bg-red-50 hover:text-red-600 transition" type="submit">Delete</button>
+                        <SubmitButton className="rounded px-2 py-1 text-[11px] text-muted hover:bg-red-50 hover:text-red-600 transition" pendingText="Deleting…">Delete</SubmitButton>
                       </form>
                       <Link href={`/sites/forms/${f.id}`} className="flex items-center gap-0.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition">
                         Edit <ChevronRight size={12} />
@@ -397,9 +398,9 @@ function FormsTab({ forms }: { forms: FormWithCount[] }) {
         <CardBody>
           <form action={createForm} className="space-y-3">
             <Field label="Form Name" name="name" placeholder="Contact Us" required />
-            <button className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" type="submit">
+            <SubmitButton className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" pendingText="Creating…">
               Create Form
-            </button>
+            </SubmitButton>
           </form>
         </CardBody>
       </Card>
@@ -446,7 +447,7 @@ function SurveysTab({ surveys }: { surveys: SurveyWithCount[] }) {
                     <div className="flex shrink-0 items-center gap-1.5">
                       <form action={deleteSurvey}>
                         <input type="hidden" name="surveyId" value={sv.id} />
-                        <button className="rounded px-2 py-1 text-[11px] text-muted hover:bg-red-50 hover:text-red-600 transition" type="submit">Delete</button>
+                        <SubmitButton className="rounded px-2 py-1 text-[11px] text-muted hover:bg-red-50 hover:text-red-600 transition" pendingText="Deleting…">Delete</SubmitButton>
                       </form>
                       <Link href={`/sites/surveys/${sv.id}`} className="flex items-center gap-0.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition">
                         Edit <ChevronRight size={12} />
@@ -472,9 +473,9 @@ function SurveysTab({ surveys }: { surveys: SurveyWithCount[] }) {
         <CardBody>
           <form action={createSurvey} className="space-y-3">
             <Field label="Survey Name" name="name" placeholder="Customer satisfaction" required />
-            <button className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" type="submit">
+            <SubmitButton className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" pendingText="Creating…">
               Create Survey
-            </button>
+            </SubmitButton>
           </form>
         </CardBody>
       </Card>
@@ -522,7 +523,7 @@ function BlogTab({ posts }: { posts: Prisma.BlogPostGetPayload<object>[] }) {
                   <div className="flex shrink-0 items-center gap-1.5">
                     <form action={deleteBlogPost}>
                       <input type="hidden" name="postId" value={post.id} />
-                      <button className="rounded px-2 py-1 text-[11px] text-muted hover:bg-red-50 hover:text-red-600 transition" type="submit">Delete</button>
+                      <SubmitButton className="rounded px-2 py-1 text-[11px] text-muted hover:bg-red-50 hover:text-red-600 transition" pendingText="Deleting…">Delete</SubmitButton>
                     </form>
                     <Link href={`/sites/blog/${post.id}`} className="flex items-center gap-0.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition">
                       Edit <ChevronRight size={12} />
@@ -550,9 +551,9 @@ function BlogTab({ posts }: { posts: Prisma.BlogPostGetPayload<object>[] }) {
             <Field label="Slug" name="slug" placeholder="how-to-grow-your-business" required />
             <Field label="Author" name="author" placeholder="Jane Smith" />
             <Field label="Category" name="category" placeholder="Marketing" />
-            <button className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" type="submit">
+            <SubmitButton className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" pendingText="Creating…">
               Create Post
-            </button>
+            </SubmitButton>
           </form>
         </CardBody>
       </Card>

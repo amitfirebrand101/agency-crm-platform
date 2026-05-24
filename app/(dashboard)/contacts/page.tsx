@@ -6,6 +6,7 @@ import { Badge, statusVariant } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { DbWarning } from "@/components/ui/db-warning";
 import { Field } from "@/components/ui/field";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -138,9 +139,9 @@ export default async function ContactsPage({
                     <option value="CUSTOMER">Customer</option>
                     <option value="INACTIVE">Inactive</option>
                   </select>
-                  <button className="h-9 rounded-md border border-border px-3 text-sm font-medium" type="submit">
+                  <SubmitButton className="h-9 rounded-md border border-border px-3 text-sm font-medium" pendingText="Filtering…">
                     Filter
-                  </button>
+                  </SubmitButton>
                 </form>
               </div>
             </CardHeader>
@@ -294,12 +295,12 @@ export default async function ContactsPage({
                 <Field label="Phone" name="phone" type="tel" />
                 <Field label="Company" name="companyName" />
                 <Field label="Source" name="source" placeholder="Website, referral…" />
-                <button
+                <SubmitButton
                   className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-                  type="submit"
+                  pendingText="Creating…"
                 >
                   Create contact
-                </button>
+                </SubmitButton>
               </form>
             </CardBody>
           </Card>
@@ -325,12 +326,12 @@ export default async function ContactsPage({
                   name="color"
                   type="color"
                 />
-                <button
+                <SubmitButton
                   className="col-span-2 rounded-md border border-border px-3 py-2 text-sm font-semibold transition hover:bg-background"
-                  type="submit"
+                  pendingText="Adding…"
                 >
                   Add tag
-                </button>
+                </SubmitButton>
               </form>
               {tags.length > 0 ? (
                 <div className="mt-3 flex flex-wrap gap-2">
@@ -371,12 +372,12 @@ export default async function ContactsPage({
                     <option value="URL">URL</option>
                   </select>
                 </label>
-                <button
+                <SubmitButton
                   className="w-full rounded-md border border-border px-3 py-2 text-sm font-semibold transition hover:bg-background"
-                  type="submit"
+                  pendingText="Adding…"
                 >
                   Add field
-                </button>
+                </SubmitButton>
               </form>
               {customFields.length > 0 ? (
                 <div className="mt-3 space-y-2">
