@@ -1,16 +1,16 @@
 import Link from "next/link";
-import { Plus, Search, Tags, UserRound } from "lucide-react";
+import { Plus, Search, Tags, Upload, UserRound } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { createContact, createCustomField, createTag } from "@/app/(dashboard)/contacts/actions";
-import { Badge, statusVariant } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { DbWarning } from "@/components/ui/db-warning";
 import { Field } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ContactTable } from "./contact-table";
 
-type ContactWithTags = Prisma.ContactGetPayload<{ include: { tags: { include: { tag: true } } } }>;
+type ContactWithTags = Prisma.ContactGetPayload<{ include: { tags: { include: { tag: { select: { id: true; name: true; color: true } } } } } }>;
 
 const AVATAR_COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ec4899", "#06b6d4", "#6366f1"];
 function avatarBg(name: string): string {
@@ -61,7 +61,7 @@ export default async function ContactsPage({
         where,
         orderBy: { createdAt: "desc" },
         take: 100,
-        include: { tags: { include: { tag: true } } }
+        include: { tags: { include: { tag: { select: { id: true, name: true, color: true } } } } }
       }),
       prisma.tag.findMany({
         where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
@@ -119,30 +119,39 @@ export default async function ContactsPage({
                     {contacts.length}
                   </span>
                 </div>
-                <form className="flex flex-wrap items-center gap-2" method="GET">
-                  <div className="relative">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" size={14} />
-                    <input
-                      className="h-9 w-52 rounded-md border border-border bg-background pl-8 pr-3 text-sm outline-none ring-primary/20 focus:ring-4"
-                      defaultValue={query}
-                      name="q"
-                      placeholder="Search contacts…"
-                    />
-                  </div>
-                  <select
-                    className="h-9 rounded-md border border-border bg-background px-2 text-sm"
-                    defaultValue={statusFilter}
-                    name="status"
+                <div className="flex flex-wrap items-center gap-2">
+                  <form className="flex flex-wrap items-center gap-2" method="GET">
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted" size={14} />
+                      <input
+                        className="h-9 w-52 rounded-md border border-border bg-background pl-8 pr-3 text-sm outline-none ring-primary/20 focus:ring-4"
+                        defaultValue={query}
+                        name="q"
+                        placeholder="Search contacts…"
+                      />
+                    </div>
+                    <select
+                      className="h-9 rounded-md border border-border bg-background px-2 text-sm"
+                      defaultValue={statusFilter}
+                      name="status"
+                    >
+                      <option value="">All statuses</option>
+                      <option value="LEAD">Lead</option>
+                      <option value="CUSTOMER">Customer</option>
+                      <option value="INACTIVE">Inactive</option>
+                    </select>
+                    <SubmitButton className="h-9 rounded-md border border-border px-3 text-sm font-medium" pendingText="Filtering…">
+                      Filter
+                    </SubmitButton>
+                  </form>
+                  <Link
+                    href="/contacts/import"
+                    className="flex h-9 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-background transition"
                   >
-                    <option value="">All statuses</option>
-                    <option value="LEAD">Lead</option>
-                    <option value="CUSTOMER">Customer</option>
-                    <option value="INACTIVE">Inactive</option>
-                  </select>
-                  <SubmitButton className="h-9 rounded-md border border-border px-3 text-sm font-medium" pendingText="Filtering…">
-                    Filter
-                  </SubmitButton>
-                </form>
+                    <Upload size={14} />
+                    Import
+                  </Link>
+                </div>
               </div>
             </CardHeader>
 
@@ -161,116 +170,21 @@ export default async function ContactsPage({
                 </p>
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[860px] text-left text-sm">
-                  <thead className="border-b border-border bg-background text-muted">
-                    <tr>
-                      <th className="px-4 py-3 font-semibold">Contact</th>
-                      <th className="px-4 py-3 font-semibold">Email</th>
-                      <th className="px-4 py-3 font-semibold">Phone</th>
-                      <th className="px-4 py-3 font-semibold">Tags</th>
-                      <th className="px-4 py-3 font-semibold">Status</th>
-                      <th className="px-4 py-3 font-semibold">Added</th>
-                      <th className="px-4 py-3 font-semibold sr-only">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {contacts.map((contact) => {
-                      const fullName = `${contact.firstName} ${contact.lastName ?? ""}`.trim();
-                      const initial = fullName.charAt(0).toUpperCase();
-                      return (
-                        <tr className="transition hover:bg-background" key={contact.id}>
-                          {/* Contact */}
-                          <td className="px-4 py-3">
-                            <div className="flex items-center gap-3">
-                              <div
-                                className="flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white"
-                                style={{ backgroundColor: avatarBg(fullName) }}
-                              >
-                                {initial}
-                              </div>
-                              <div>
-                                <Link
-                                  className="font-semibold text-foreground hover:text-primary"
-                                  href={`/contacts/${contact.id}`}
-                                >
-                                  {fullName}
-                                </Link>
-                                {contact.companyName ? (
-                                  <div className="text-xs text-muted">{contact.companyName}</div>
-                                ) : null}
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Email */}
-                          <td className="px-4 py-3">
-                            {contact.email ? (
-                              <a
-                                className="text-primary hover:underline"
-                                href={`mailto:${contact.email}`}
-                              >
-                                {contact.email}
-                              </a>
-                            ) : (
-                              <span className="text-muted">—</span>
-                            )}
-                          </td>
-
-                          {/* Phone */}
-                          <td className="px-4 py-3">
-                            {contact.phone ? (
-                              <a
-                                className="text-foreground hover:text-primary hover:underline"
-                                href={`tel:${contact.phone}`}
-                              >
-                                {contact.phone}
-                              </a>
-                            ) : (
-                              <span className="text-muted">—</span>
-                            )}
-                          </td>
-
-                          {/* Tags */}
-                          <td className="px-4 py-3">
-                            <div className="flex flex-wrap gap-1">
-                              {contact.tags.map(({ tag }) => (
-                                <span
-                                  className="rounded px-1.5 py-0.5 text-xs font-semibold text-white"
-                                  key={tag.id}
-                                  style={{ backgroundColor: tag.color }}
-                                >
-                                  {tag.name}
-                                </span>
-                              ))}
-                              {!contact.tags.length ? <span className="text-muted">—</span> : null}
-                            </div>
-                          </td>
-
-                          {/* Status */}
-                          <td className="px-4 py-3">
-                            <Badge variant={statusVariant(contact.status)}>{contact.status}</Badge>
-                          </td>
-
-                          {/* Added */}
-                          <td className="px-4 py-3 text-muted">
-                            {new Date(contact.createdAt).toLocaleDateString()}
-                          </td>
-
-                          {/* Actions */}
-                          <td className="px-4 py-3">
-                            <Link
-                              className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold transition hover:bg-background"
-                              href={`/contacts/${contact.id}`}
-                            >
-                              View
-                            </Link>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+              <div className="px-0">
+                <ContactTable
+                  contacts={contacts.map((c) => ({
+                    id: c.id,
+                    firstName: c.firstName,
+                    lastName: c.lastName,
+                    email: c.email,
+                    phone: c.phone,
+                    companyName: c.companyName,
+                    status: c.status,
+                    createdAt: c.createdAt.toISOString(),
+                    tags: c.tags.map((ct) => ({ tag: ct.tag })),
+                  }))}
+                  tags={tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
+                />
               </div>
             )}
           </Card>

@@ -1,28 +1,19 @@
 import { Plus, Target, TrendingUp, TrendingDown, DollarSign, Percent } from "lucide-react";
 import type { Prisma } from "@prisma/client";
-import { createOpportunity, createPipeline, moveOpportunityToStage, updateOpportunityStatus } from "@/app/(dashboard)/module-actions";
-import { Badge, statusVariant } from "@/components/ui/badge";
+import { createOpportunity, createPipeline } from "@/app/(dashboard)/module-actions";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { DbWarning } from "@/components/ui/db-warning";
 import { Field } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { KanbanBoard } from "./kanban";
 
 type PipelineWithStages = Prisma.PipelineGetPayload<{ include: { stages: { orderBy: { position: "asc" } } } }>;
-type OpportunityWithRelations = Prisma.OpportunityGetPayload<{ include: { stage: true; contact: true } }>;
-
-const AVATAR_COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ec4899", "#06b6d4", "#6366f1"];
-function avatarBg(name: string): string {
-  return AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length] ?? "#3b82f6";
-}
+type OpportunityWithRelations = Prisma.OpportunityGetPayload<{ include: { stage: true; contact: { select: { id: true; firstName: true; lastName: true } } } }>;
 
 function formatCents(cents: number) {
   return "$" + (cents / 100).toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
-function daysOld(createdAt: Date) {
-  return Math.floor((Date.now() - new Date(createdAt).getTime()) / 86_400_000);
 }
 
 export default async function OpportunitiesPage({
@@ -48,7 +39,7 @@ export default async function OpportunitiesPage({
       prisma.opportunity.findMany({
         where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
         orderBy: { createdAt: "desc" },
-        include: { stage: true, contact: true },
+        include: { stage: true, contact: { select: { id: true, firstName: true, lastName: true } } },
       }),
     ]);
   } catch (error) {
@@ -190,7 +181,6 @@ export default async function OpportunitiesPage({
       {/* Kanban board */}
       {activePipeline ? (
         <section>
-          {/* Pipeline header (shown when only one pipeline, since multi shows tabs) */}
           {pipelines.length === 1 ? (
             <div className="mb-4 flex items-center gap-2">
               <Target className="text-primary" size={18} />
@@ -203,148 +193,22 @@ export default async function OpportunitiesPage({
               This pipeline has no stages yet. Add stages to start tracking deals.
             </div>
           ) : (
-            <div className="flex gap-4 overflow-x-auto pb-4">
-              {activePipeline.stages.map((stage) => {
-                const stageOpps = opportunities.filter((o) => o.stageId === stage.id);
-                const stageValue = stageOpps.reduce((s, o) => s + o.valueCents, 0);
-
-                return (
-                  <div className="w-72 shrink-0" key={stage.id}>
-                    {/* Column header */}
-                    <div className="mb-3 flex items-center justify-between rounded-lg bg-background px-3 py-2.5 border border-border">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm">{stage.name}</span>
-                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/10 px-1.5 text-xs font-bold text-primary">
-                          {stageOpps.length}
-                        </span>
-                      </div>
-                      <span className="text-xs font-semibold text-muted">
-                        {formatCents(stageValue)}
-                      </span>
-                    </div>
-
-                    {/* Deal cards */}
-                    <div className="space-y-3">
-                      {stageOpps.map((opp) => {
-                        const contactName = opp.contact
-                          ? `${opp.contact.firstName} ${opp.contact.lastName ?? ""}`.trim()
-                          : null;
-                        const initials = contactName
-                          ? contactName
-                              .split(" ")
-                              .map((w) => w[0] ?? "")
-                              .join("")
-                              .toUpperCase()
-                              .slice(0, 2)
-                          : "?";
-
-                        return (
-                          <div
-                            key={opp.id}
-                            className="rounded-xl border border-border bg-white shadow-sm p-4 space-y-3"
-                          >
-                            {/* Deal name */}
-                            <div className="font-semibold text-sm leading-snug">{opp.name}</div>
-
-                            {/* Contact row */}
-                            {contactName ? (
-                              <div className="flex items-center gap-2">
-                                <span
-                                  className="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-bold text-white shrink-0"
-                                  style={{ backgroundColor: avatarBg(contactName) }}
-                                >
-                                  {initials}
-                                </span>
-                                <span className="text-xs text-muted truncate">{contactName}</span>
-                              </div>
-                            ) : null}
-
-                            {/* Value + status row */}
-                            <div className="flex items-center justify-between gap-2">
-                              <span className="text-lg font-bold">
-                                {formatCents(opp.valueCents)}
-                              </span>
-                              <Badge variant={statusVariant(opp.status)}>{opp.status}</Badge>
-                            </div>
-
-                            {/* Days old */}
-                            <div className="text-[11px] text-muted">
-                              {daysOld(opp.createdAt)}d old
-                            </div>
-
-                            {/* Move to stage */}
-                            {activePipeline.stages.length > 1 ? (
-                              <form action={moveOpportunityToStage} className="flex gap-1.5">
-                                <input name="opportunityId" type="hidden" value={opp.id} />
-                                <select
-                                  className="flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-xs"
-                                  defaultValue={opp.stageId}
-                                  name="stageId"
-                                >
-                                  {activePipeline.stages.map((s) => (
-                                    <option key={s.id} value={s.id}>
-                                      {s.name}
-                                    </option>
-                                  ))}
-                                </select>
-                                <SubmitButton
-                                  className="shrink-0 rounded-md border border-border bg-background px-2.5 py-1.5 text-xs font-semibold hover:bg-primary hover:text-white hover:border-primary transition"
-                                  pendingText="Moving…"
-                                >
-                                  Move
-                                </SubmitButton>
-                              </form>
-                            ) : null}
-
-                            {/* Won / Lost buttons */}
-                            {opp.status === "OPEN" ? (
-                              <div className="flex gap-1.5">
-                                <form action={updateOpportunityStatus} className="flex-1">
-                                  <input name="opportunityId" type="hidden" value={opp.id} />
-                                  <input name="status" type="hidden" value="WON" />
-                                  <SubmitButton
-                                    className="w-full rounded-md border border-green-200 bg-green-50 px-2 py-1.5 text-xs font-semibold text-green-700 hover:bg-green-100 transition"
-                                    pendingText="Saving…"
-                                  >
-                                    Won
-                                  </SubmitButton>
-                                </form>
-                                <form action={updateOpportunityStatus} className="flex-1">
-                                  <input name="opportunityId" type="hidden" value={opp.id} />
-                                  <input name="status" type="hidden" value="LOST" />
-                                  <SubmitButton
-                                    className="w-full rounded-md border border-red-200 bg-red-50 px-2 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 transition"
-                                    pendingText="Saving…"
-                                  >
-                                    Lost
-                                  </SubmitButton>
-                                </form>
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-
-                      {/* Empty stage placeholder */}
-                      {stageOpps.length === 0 ? (
-                        <div className="rounded-xl border border-dashed border-border p-5 text-xs text-muted text-center">
-                          No deals in this stage
-                        </div>
-                      ) : null}
-
-                      {/* Add deal button */}
-                      <a
-                        href="#new-opportunity"
-                        className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-border py-2.5 text-xs font-semibold text-muted hover:border-primary hover:text-primary transition"
-                      >
-                        <Plus size={14} />
-                        Add Deal
-                      </a>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <KanbanBoard
+              stages={activePipeline.stages}
+              initialOpportunities={opportunities
+                .filter((o) => activePipeline.stages.some((s) => s.id === o.stageId))
+                .map((o) => ({
+                  id: o.id,
+                  name: o.name,
+                  valueCents: o.valueCents,
+                  status: o.status,
+                  stageId: o.stageId,
+                  createdAt: o.createdAt.toISOString(),
+                  contact: o.contact
+                    ? { id: o.contact.id, firstName: o.contact.firstName, lastName: o.contact.lastName }
+                    : null,
+                }))}
+            />
           )}
         </section>
       ) : null}

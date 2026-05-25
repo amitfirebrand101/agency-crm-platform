@@ -85,6 +85,20 @@ export default async function CalendarDetailPage({ params }: Props) {
         <div className="flex items-center gap-2">
           <Badge variant="muted">{calendar.appointments.length} total</Badge>
           <Badge variant="info">{upcoming.length} upcoming</Badge>
+          <Link
+            href={`/calendars/${calendar.id}/availability`}
+            className="rounded-lg border border-border bg-background px-3 py-1.5 text-xs font-semibold text-muted hover:text-foreground transition"
+          >
+            Availability
+          </Link>
+          <Link
+            href={`/book/${(calendar as { bookingPageSlug?: string | null }).bookingPageSlug ?? calendar.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition"
+          >
+            Booking page ↗
+          </Link>
         </div>
       </div>
 
