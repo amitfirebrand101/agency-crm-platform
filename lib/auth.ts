@@ -215,32 +215,68 @@ async function provisionNewAgency(authUser: {
     ?.toLowerCase()
     .replace(/[^a-z0-9]+/g, "-") ?? "agency";
 
-  const agency = await prisma.agency.create({
-    data: {
-      name: `${authUser.user_metadata?.full_name ?? authUser.email.split("@")[0]}'s Agency`,
-      slug: `${slugBase}-${authUser.id.slice(0, 8)}`,
-      members: {
-        create: { userId: authUser.id, role: "OWNER" },
-      },
-      subAccounts: {
-        create: {
-          name: "Primary Sub Account",
-          slug: "primary",
-          members: { create: { userId: authUser.id, role: "ADMIN" } },
+  const slug = `${slugBase}-${authUser.id.slice(0, 8)}`;
+
+  let agency: Awaited<ReturnType<typeof prisma.agency.create>> & {
+    subAccounts: Array<{ id: string; name: string; members: Array<{ role: string }> }>;
+  };
+
+  try {
+    agency = await prisma.agency.create({
+      data: {
+        name: `${authUser.user_metadata?.full_name ?? authUser.email.split("@")[0]}'s Agency`,
+        slug,
+        members: {
+          create: { userId: authUser.id, role: "OWNER" },
+        },
+        subAccounts: {
+          create: {
+            name: "Primary Sub Account",
+            slug: "primary",
+            members: { create: { userId: authUser.id, role: "ADMIN" } },
+          },
         },
       },
-    },
-    include: {
-      subAccounts: {
-        include: { members: { where: { userId: authUser.id } } },
+      include: {
+        subAccounts: {
+          include: { members: { where: { userId: authUser.id } } },
+        },
       },
-    },
-  });
+    });
+    logger.info("Provisioned new agency for user", { userId: authUser.id, agencyId: agency.id });
+  } catch (err) {
+    // Race condition: multiple concurrent requests all found no membership and
+    // all tried to provision. First one won; re-fetch the one it created.
+    if ((err as { code?: string }).code !== "P2002") throw err;
 
-  logger.info("Provisioned new agency for user", {
-    userId: authUser.id,
-    agencyId: agency.id,
-  });
+    const existing = await prisma.agencyMembership.findFirst({
+      where:   { userId: authUser.id },
+      include: {
+        agency: {
+          include: {
+            subAccounts: {
+              take: 1,
+              include: { members: { where: { userId: authUser.id }, take: 1 } },
+            },
+          },
+        },
+      },
+    });
+    if (!existing) throw err;
+
+    const sub = existing.agency.subAccounts[0] ?? null;
+    return {
+      id:             authUser.id,
+      name:           (authUser.user_metadata?.full_name as string | null) ?? null,
+      email:          authUser.email,
+      agencyId:       existing.agencyId,
+      agencyName:     existing.agency.name,
+      agencyRole:     existing.role,
+      subAccountId:   sub?.id   ?? null,
+      subAccountName: sub?.name ?? null,
+      subAccountRole: sub?.members[0]?.role ?? null,
+    };
+  }
 
   const subAccount = agency.subAccounts[0] ?? null;
   return {
@@ -249,10 +285,10 @@ async function provisionNewAgency(authUser: {
     email:          authUser.email,
     agencyId:       agency.id,
     agencyName:     agency.name,
-    agencyRole:     "OWNER",
+    agencyRole:     "OWNER" as AgencyRole,
     subAccountId:   subAccount?.id   ?? null,
     subAccountName: subAccount?.name ?? null,
-    subAccountRole: subAccount?.members[0]?.role ?? null,
+    subAccountRole: (subAccount?.members[0]?.role ?? null) as SubAccountRole | null,
   };
 }
 
