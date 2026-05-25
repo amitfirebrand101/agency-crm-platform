@@ -3,6 +3,9 @@
 ## 0.3.1 - 2026-05-25
 
 ### Automations
+- Added `docs/AUTOMATION_GOHIGHLEVEL_PARITY_AUDIT.md` with a HighLevel-derived trigger/action inventory, expected configuration fields, dependencies, and implementation status.
+- Updated the workflow builder so IF/ELSE renders real editable Yes/No branch paths, not a single flat action card.
+- Branch path actions can be added, configured, removed, saved, and executed through the nested `trueBranch` / `falseBranch` workflow definition.
 - Fixed IF/ELSE execution so the selected branch becomes the actual execution path, including steps that follow the branch.
 - Fixed WAIT persistence by storing `resumeAt` and a durable resume cursor for the remaining steps. The resume route is present, but Vercel Hobby cannot run minute-level cron schedules.
 - Added support for WAIT steps inside IF/ELSE paths.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useTransition } from "react";
+import { useCallback, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -32,7 +32,7 @@ import { deleteWorkflow, publishWorkflow, runTestWorkflow, unpublishWorkflow } f
 
 type PanelState =
   | { mode: "add-trigger" }
-  | { mode: "add-step"; insertAt: number }
+  | { mode: "add-step"; insertAt: number; branchParentId?: string; branchKey?: "trueBranch" | "falseBranch" }
   | { mode: "config-trigger"; id: string }
   | { mode: "config-step"; id: string }
   | null;
@@ -144,11 +144,53 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
     }));
   };
 
+  const mapSteps = (
+    steps: AutomationStep[],
+    mapper: (step: AutomationStep) => AutomationStep | null
+  ): AutomationStep[] => {
+    return steps.flatMap((step) => {
+      const mapped = mapper(step);
+      if (!mapped) return [];
+      return [{
+        ...mapped,
+        trueBranch: mapped.trueBranch ? mapSteps(mapped.trueBranch as AutomationStep[], mapper) : mapped.trueBranch,
+        falseBranch: mapped.falseBranch ? mapSteps(mapped.falseBranch as AutomationStep[], mapper) : mapped.falseBranch,
+      }];
+    });
+  };
+
+  const findStep = (steps: AutomationStep[], id: string): AutomationStep | null => {
+    for (const step of steps) {
+      if (step.id === id) return step;
+      const foundTrue = findStep((step.trueBranch ?? []) as AutomationStep[], id);
+      if (foundTrue) return foundTrue;
+      const foundFalse = findStep((step.falseBranch ?? []) as AutomationStep[], id);
+      if (foundFalse) return foundFalse;
+    }
+    return null;
+  };
+
   // Step operations
-  const addStep = (def: ActionDef, insertAt: number) => {
+  const addStep = (
+    def: ActionDef,
+    insertAt: number,
+    branchParentId?: string,
+    branchKey?: "trueBranch" | "falseBranch"
+  ) => {
     const id = crypto.randomUUID();
     const newStep: AutomationStep = { id, type: def.type as AutomationStep["type"], name: def.label, config: {} };
     mutate((prev) => {
+      if (branchParentId && branchKey) {
+        return {
+          ...prev,
+          steps: mapSteps(prev.steps, (step) => {
+            if (step.id !== branchParentId) return step;
+            const branch = [...((step[branchKey] ?? []) as AutomationStep[])];
+            branch.splice(insertAt, 0, newStep);
+            return { ...step, [branchKey]: branch };
+          }),
+        };
+      }
       const steps = [...prev.steps];
       steps.splice(insertAt, 0, newStep);
       return { ...prev, steps };
@@ -157,21 +199,21 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
   };
 
   const removeStep = (id: string) => {
-    mutate((prev) => ({ ...prev, steps: prev.steps.filter((s) => s.id !== id) }));
+    mutate((prev) => ({ ...prev, steps: mapSteps(prev.steps, (s) => (s.id === id ? null : s)) }));
     if (panel?.mode === "config-step" && panel.id === id) setPanel(null);
   };
 
   const updateStepConfig = (id: string, patch: Record<string, string>) => {
     mutate((prev) => ({
       ...prev,
-      steps: prev.steps.map((s) => (s.id === id ? { ...s, config: { ...s.config, ...patch } } : s)),
+      steps: mapSteps(prev.steps, (s) => (s.id === id ? { ...s, config: { ...s.config, ...patch } } : s)),
     }));
   };
 
   const updateStepLabel = (id: string, label: string) => {
     mutate((prev) => ({
       ...prev,
-      steps: prev.steps.map((s) => (s.id === id ? { ...s, name: label } : s)),
+      steps: mapSteps(prev.steps, (s) => (s.id === id ? { ...s, name: label } : s)),
     }));
   };
 
@@ -196,7 +238,39 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
   const onDragEnd = () => { setDragId(null); setDropId(null); };
 
   const selectedTrigger = panel?.mode === "config-trigger" ? definition.triggers.find((t) => t.id === panel.id) : null;
-  const selectedStep = panel?.mode === "config-step" ? definition.steps.find((s) => s.id === panel.id) : null;
+  const selectedStep = panel?.mode === "config-step" ? findStep(definition.steps, panel.id) : null;
+
+  const renderStep = (step: AutomationStep, index: number, options?: { nested?: boolean }) => {
+    const nested = options?.nested ?? false;
+    return (
+      <div className="w-full" key={step.id}>
+        <StepCard
+          active={panel?.mode === "config-step" && panel.id === step.id}
+          dragging={!nested && dragId === step.id}
+          dropTarget={!nested && dropId === step.id}
+          index={index}
+          nested={nested}
+          onClick={() => setPanel({ mode: "config-step", id: step.id })}
+          onDragEnd={onDragEnd}
+          onDragOver={(e) => !nested && onDragOver(e, step.id)}
+          onDragStart={() => !nested && onDragStart(step.id)}
+          onDrop={() => !nested && onDrop(step.id)}
+          onRemove={() => removeStep(step.id)}
+          step={step}
+        />
+        {step.type === "IF_ELSE" ? (
+          <BranchGrid
+            falseBranch={(step.falseBranch ?? []) as AutomationStep[]}
+            onAddFalse={(insertAt) => setPanel({ mode: "add-step", insertAt, branchParentId: step.id, branchKey: "falseBranch" })}
+            onAddTrue={(insertAt) => setPanel({ mode: "add-step", insertAt, branchParentId: step.id, branchKey: "trueBranch" })}
+            renderStep={(branchStep, branchIndex) => renderStep(branchStep, branchIndex, { nested: true })}
+            trueBranch={(step.trueBranch ?? []) as AutomationStep[]}
+          />
+        ) : null}
+        {!nested ? <Connector onAdd={() => setPanel({ mode: "add-step", insertAt: index + 1 })} /> : null}
+      </div>
+    );
+  };
 
   return (
     <div className="-mx-5 -my-6 lg:-mx-8 flex flex-col" style={{ height: "calc(100vh - 61px)" }}>
@@ -359,24 +433,7 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
             {(definition.triggers.length > 0 || definition.steps.length > 0) && (
               <>
                 <Connector onAdd={() => setPanel({ mode: "add-step", insertAt: 0 })} />
-                {definition.steps.map((step, index) => (
-                  <div className="w-full" key={step.id}>
-                    <StepCard
-                      active={panel?.mode === "config-step" && panel.id === step.id}
-                      dragging={dragId === step.id}
-                      dropTarget={dropId === step.id}
-                      index={index}
-                      onClick={() => setPanel({ mode: "config-step", id: step.id })}
-                      onDragEnd={onDragEnd}
-                      onDragOver={(e) => onDragOver(e, step.id)}
-                      onDragStart={() => onDragStart(step.id)}
-                      onDrop={() => onDrop(step.id)}
-                      onRemove={() => removeStep(step.id)}
-                      step={step}
-                    />
-                    <Connector onAdd={() => setPanel({ mode: "add-step", insertAt: index + 1 })} />
-                  </div>
-                ))}
+                {definition.steps.map((step, index) => renderStep(step, index))}
               </>
             )}
           </div>
@@ -411,7 +468,7 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
             {panel.mode === "add-step" && (
               <NodePicker
                 items={actionCatalog}
-                onSelect={(def) => addStep(def as ActionDef, panel.insertAt)}
+                onSelect={(def) => addStep(def as ActionDef, panel.insertAt, panel.branchParentId, panel.branchKey)}
                 type="action"
               />
             )}
@@ -517,6 +574,7 @@ type StepCardProps = {
   active: boolean;
   dragging: boolean;
   dropTarget: boolean;
+  nested?: boolean;
   onClick: () => void;
   onRemove: () => void;
   onDragStart: () => void;
@@ -525,7 +583,7 @@ type StepCardProps = {
   onDragEnd: () => void;
 };
 
-function StepCard({ step, index, active, dragging, dropTarget, onClick, onRemove, onDragStart, onDragOver, onDrop, onDragEnd }: StepCardProps) {
+function StepCard({ step, index, active, dragging, dropTarget, nested = false, onClick, onRemove, onDragStart, onDragOver, onDrop, onDragEnd }: StepCardProps) {
   const def = getActionDef(step.type);
   const Icon = def?.icon ?? Zap;
   const color = def?.color ?? "bg-slate-500";
@@ -546,7 +604,7 @@ function StepCard({ step, index, active, dragging, dropTarget, onClick, onRemove
         active ? "border-primary shadow-md" :
         "border-transparent hover:border-primary/40 hover:shadow-md"
       }`}
-      draggable
+      draggable={!nested}
       onDragEnd={onDragEnd}
       onDragOver={onDragOver}
       onDragStart={(e) => { e.dataTransfer.effectAllowed = "move"; onDragStart(); }}
@@ -554,15 +612,17 @@ function StepCard({ step, index, active, dragging, dropTarget, onClick, onRemove
       onClick={onClick}
     >
       <div className={`flex items-start gap-3 ${colorLight} px-4 py-3`}>
-        <button
-          className="mt-0.5 cursor-grab shrink-0 rounded-md p-1 text-muted/60 hover:text-muted transition active:cursor-grabbing"
-          onClick={(e) => e.stopPropagation()}
-          onMouseDown={(e) => e.stopPropagation()}
-          title="Drag to reorder"
-          type="button"
-        >
-          <GripVertical size={14} />
-        </button>
+        {!nested ? (
+          <button
+            className="mt-0.5 cursor-grab shrink-0 rounded-md p-1 text-muted/60 hover:text-muted transition active:cursor-grabbing"
+            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            title="Drag to reorder"
+            type="button"
+          >
+            <GripVertical size={14} />
+          </button>
+        ) : null}
         <span className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${color} text-white shadow-sm`}>
           <Icon size={15} />
         </span>
@@ -589,6 +649,87 @@ function StepCard({ step, index, active, dragging, dropTarget, onClick, onRemove
           <p className="text-xs italic text-muted/60">Click to configure</p>
         )}
       </div>
+    </div>
+  );
+}
+
+function BranchGrid({
+  trueBranch,
+  falseBranch,
+  onAddTrue,
+  onAddFalse,
+  renderStep,
+}: {
+  trueBranch: AutomationStep[];
+  falseBranch: AutomationStep[];
+  onAddTrue: (insertAt: number) => void;
+  onAddFalse: (insertAt: number) => void;
+  renderStep: (step: AutomationStep, index: number) => ReactNode;
+}) {
+  return (
+    <div className="mt-3 grid gap-3 rounded-2xl border border-border bg-white p-3 shadow-sm md:grid-cols-2">
+      <BranchColumn
+        emptyText="Actions here run when the condition is true."
+        label="Yes path"
+        onAdd={onAddTrue}
+        renderStep={renderStep}
+        steps={trueBranch}
+        tone="emerald"
+      />
+      <BranchColumn
+        emptyText="Actions here run when no condition is matched."
+        label="No path"
+        onAdd={onAddFalse}
+        renderStep={renderStep}
+        steps={falseBranch}
+        tone="slate"
+      />
+    </div>
+  );
+}
+
+function BranchColumn({
+  label,
+  tone,
+  steps,
+  emptyText,
+  onAdd,
+  renderStep,
+}: {
+  label: string;
+  tone: "emerald" | "slate";
+  steps: AutomationStep[];
+  emptyText: string;
+  onAdd: (insertAt: number) => void;
+  renderStep: (step: AutomationStep, index: number) => ReactNode;
+}) {
+  const badgeClass =
+    tone === "emerald" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-700";
+  return (
+    <div className="min-w-0 rounded-xl border border-border bg-background/50 p-2">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className={`rounded-md px-2 py-1 text-[11px] font-bold uppercase tracking-widest ${badgeClass}`}>
+          {label}
+        </span>
+        <button
+          className="rounded-md border border-border bg-white px-2 py-1 text-xs font-medium hover:bg-panel"
+          onClick={() => onAdd(steps.length)}
+          type="button"
+        >
+          Add
+        </button>
+      </div>
+      {steps.length > 0 ? (
+        <div className="space-y-2">{steps.map((step, index) => renderStep(step, index))}</div>
+      ) : (
+        <button
+          className="w-full rounded-lg border border-dashed border-border bg-white px-3 py-6 text-center text-xs text-muted hover:border-primary hover:text-primary"
+          onClick={() => onAdd(0)}
+          type="button"
+        >
+          {emptyText}
+        </button>
+      )}
     </div>
   );
 }

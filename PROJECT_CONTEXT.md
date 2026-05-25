@@ -107,6 +107,8 @@ NEXT_PUBLIC_APP_URL=https://agency-crm-platform.vercel.app
 - Automation CRUD: workflow builder, trigger+action CRUD, publish/unpublish, delete, run history.
 - Automation executor: DB run tracking, If/Else branching, outbound webhook with SSRF guard.
 - Automation engine now persists WAIT resume cursors, supports WAIT inside selected IF/ELSE paths, and disables non-executable picker items.
+- Automation builder now renders IF/ELSE as real Yes/No branch paths with nested branch actions.
+- `docs/AUTOMATION_GOHIGHLEVEL_PARITY_AUDIT.md` tracks the HighLevel-derived trigger/action parity backlog, expected options, provider dependencies, and current implementation status.
 - Automation event dispatch is wired for contact updates, tag removal, appointment status changes, opportunity create/status changes, and pipeline stage moves.
 - Internal automation actions now include assignment/removal, DND flags, notes/internal notifications, opportunity update, appointment status update, guarded contact deletion, tags, conversations, contacts, webhooks, IF/ELSE, and WAIT.
 - Inbound webhook trigger with token auth.
