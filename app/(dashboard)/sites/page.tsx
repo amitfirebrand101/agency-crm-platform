@@ -2,6 +2,7 @@ import Link from "next/link";
 import { BarChart2, BookOpen, ChevronRight, FileText, Globe, LayoutTemplate, MessageSquare, MousePointerClick, Plus, TrendingUp, Zap } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { createFunnel, createForm, createSurvey, createBlogPost, deleteFunnel, deleteForm, deleteSurvey, deleteBlogPost } from "@/app/(dashboard)/sites/actions";
+import { createSite } from "@/app/(dashboard)/sites/[siteId]/actions";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { DbWarning } from "@/components/ui/db-warning";
@@ -25,6 +26,10 @@ type SurveyWithCount = Prisma.SurveyGetPayload<{
   include: { _count: { select: { responses: true } } };
 }>;
 
+type SiteWithCount = Prisma.SiteGetPayload<{
+  include: { _count: { select: { pages: true } } };
+}>;
+
 const TABS = [
   { key: "funnels",  label: "Funnels",  icon: LayoutTemplate },
   { key: "websites", label: "Websites", icon: Globe },
@@ -44,7 +49,7 @@ export default async function SitesPage({ searchParams }: { searchParams: Promis
   let databaseUnavailable = false;
 
   let funnels: FunnelWithCounts[] = [];
-  let websites: FunnelWithCounts[] = [];
+  let websites: SiteWithCount[] = [];
   let forms: FormWithCount[] = [];
   let surveys: SurveyWithCount[] = [];
   let blogPosts: Prisma.BlogPostGetPayload<object>[] = [];
@@ -61,12 +66,11 @@ export default async function SitesPage({ searchParams }: { searchParams: Promis
           pages: { orderBy: { order: "asc" }, take: 3 },
         },
       }),
-      prisma.funnel.findMany({
-        where: { ...where, type: "website" },
+      prisma.site.findMany({
+        where,
         orderBy: { updatedAt: "desc" },
         include: {
-          _count: { select: { pages: true, submissions: true } },
-          pages: { orderBy: { order: "asc" }, take: 3 },
+          _count: { select: { pages: true } },
         },
       }),
       prisma.siteForm.findMany({
@@ -268,7 +272,7 @@ function FunnelCard({ funnel }: { funnel: FunnelWithCounts }) {
 
 // ─── Websites Tab ─────────────────────────────────────────────────────────────
 
-function WebsitesTab({ websites }: { websites: FunnelWithCounts[] }) {
+function WebsitesTab({ websites }: { websites: SiteWithCount[] }) {
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_22rem]">
       <div className="space-y-4">
@@ -290,23 +294,17 @@ function WebsitesTab({ websites }: { websites: FunnelWithCounts[] }) {
                     ) : null}
                   </div>
                   <div className="mt-auto flex items-center justify-between gap-2 pt-2 border-t border-border">
-                    <span className="text-xs text-muted"><span className="font-semibold text-foreground">{w._count.pages}</span> pages</span>
-                    <div className="flex items-center gap-1.5">
-                      <form action={deleteFunnel}>
-                        <input type="hidden" name="funnelId" value={w.id} />
-                        <SubmitButton className="rounded px-2 py-1 text-[11px] text-muted hover:bg-red-50 hover:text-red-600 transition" pendingText="Deleting…">Delete</SubmitButton>
-                      </form>
-                      <Link href={`/sites/funnels/${w.id}`} className="flex items-center gap-0.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition">
-                        Edit <ChevronRight size={12} />
-                      </Link>
-                    </div>
+                    <span className="text-xs text-muted"><span className="font-semibold text-foreground">{w._count.pages}</span> page{w._count.pages !== 1 ? "s" : ""}</span>
+                    <Link href={`/sites/${w.id}`} className="flex items-center gap-0.5 rounded-md bg-primary/10 px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary/20 transition">
+                      Manage <ChevronRight size={12} />
+                    </Link>
                   </div>
                 </CardBody>
               </Card>
             ))}
           </div>
         ) : (
-          <EmptyState icon={<Globe size={32} />} title="No websites yet" desc="Create a multi-page website with custom domain and navigation." />
+          <EmptyState icon={<Globe size={32} />} title="No websites yet" desc="Create a multi-page website and design each page with the drag-and-drop builder." />
         )}
       </div>
 
@@ -318,11 +316,9 @@ function WebsitesTab({ websites }: { websites: FunnelWithCounts[] }) {
           </div>
         </CardHeader>
         <CardBody>
-          <form action={createFunnel} className="space-y-3">
-            <input type="hidden" name="type" value="website" />
+          <form action={createSite} className="space-y-3">
             <Field label="Website Name" name="name" placeholder="Company website" required />
             <Field label="Custom Domain" name="domain" placeholder="www.yourdomain.com" />
-            <Field label="Description" name="description" placeholder="Optional description..." />
             <SubmitButton className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" pendingText="Creating…">
               Create Website
             </SubmitButton>

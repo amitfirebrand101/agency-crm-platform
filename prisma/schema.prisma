@@ -140,6 +140,7 @@ model SubAccount {
   calendars     Calendar[]
   automations   Automation[]
   sites         Site[]
+  sitePages     SitePage[]
   funnels       Funnel[]
   siteForms     SiteForm[]
   surveys       Survey[]
@@ -417,8 +418,44 @@ model Site {
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
   subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  pages        SitePage[]
 
   @@index([agencyId, subAccountId])
+}
+
+model SitePage {
+  id             String            @id @default(uuid()) @db.Uuid
+  siteId         String            @db.Uuid
+  subAccountId   String            @db.Uuid
+  agencyId       String            @db.Uuid
+  slug           String
+  title          String
+  status         String            @default("draft")
+  seoTitle       String?
+  seoDescription String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  site           Site              @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  subAccount     SubAccount        @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  versions       SitePageVersion[]
+
+  @@unique([siteId, slug])
+  @@index([siteId])
+  @@index([subAccountId])
+}
+
+model SitePageVersion {
+  id            String    @id @default(uuid()) @db.Uuid
+  pageId        String    @db.Uuid
+  versionNumber Int
+  status        String    @default("draft")
+  schema        Json
+  createdAt     DateTime  @default(now())
+  publishedAt   DateTime?
+  page          SitePage  @relation(fields: [pageId], references: [id], onDelete: Cascade)
+
+  @@index([pageId])
+  @@index([pageId, status])
 }
 
 model Funnel {
