@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import type { Route } from "next";
+import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Chrome, Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
@@ -9,18 +10,23 @@ import { createClient } from "@/lib/supabase/client";
 export function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(
+    searchParams.get("error") ?? null
+  );
   const [isPending, startTransition] = useTransition();
   const requestedNext = searchParams.get("next") ?? "/dashboard";
-  const next = requestedNext.startsWith("/") && !requestedNext.startsWith("//") ? requestedNext : "/dashboard";
+  const next =
+    requestedNext.startsWith("/") && !requestedNext.startsWith("//")
+      ? requestedNext
+      : "/dashboard";
 
   function signInWithPassword(formData: FormData) {
     startTransition(async () => {
       setError(null);
       const supabase = createClient();
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: String(formData.get("email") ?? ""),
-        password: String(formData.get("password") ?? "")
+        email:    String(formData.get("email") ?? ""),
+        password: String(formData.get("password") ?? ""),
       });
 
       if (signInError) {
@@ -40,13 +46,10 @@ export function LoginForm() {
       const { error: signInError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
-          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`
-        }
+          redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        },
       });
-
-      if (signInError) {
-        setError(signInError.message);
-      }
+      if (signInError) setError(signInError.message);
     });
   }
 
@@ -61,10 +64,12 @@ export function LoginForm() {
         <Chrome size={17} />
         Continue with Google
       </button>
+
       <div className="relative py-2 text-center text-xs text-muted">
         <span className="bg-background px-2">or use email</span>
         <div className="absolute left-0 right-0 top-1/2 -z-10 border-t border-border" />
       </div>
+
       <form action={signInWithPassword} className="space-y-4">
         <label className="block">
           <span className="mb-2 block text-sm font-medium">Email</span>
@@ -78,7 +83,15 @@ export function LoginForm() {
           />
         </label>
         <label className="block">
-          <span className="mb-2 block text-sm font-medium">Password</span>
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-sm font-medium">Password</span>
+            <Link
+              className="text-xs text-primary hover:underline"
+              href="/forgot-password"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <input
             autoComplete="current-password"
             className="w-full rounded-md border border-border bg-panel px-3 py-2 text-sm outline-none ring-primary/20 focus:ring-4"
@@ -89,7 +102,9 @@ export function LoginForm() {
             type="password"
           />
         </label>
-        {error ? <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p> : null}
+        {error ? (
+          <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+        ) : null}
         <button
           className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
           disabled={isPending}
@@ -99,6 +114,13 @@ export function LoginForm() {
           Sign in
         </button>
       </form>
+
+      <p className="text-center text-sm text-muted">
+        Don&apos;t have an account?{" "}
+        <Link className="font-semibold text-primary hover:underline" href="/signup">
+          Create one
+        </Link>
+      </p>
     </div>
   );
 }

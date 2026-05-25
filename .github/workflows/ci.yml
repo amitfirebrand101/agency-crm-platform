@@ -1,0 +1,74 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-type-build:
+    name: Lint · Type-check · Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      # Minimal env vars so Next.js can resolve env at build time.
+      # These are fake values — the build does NOT connect to a real DB.
+      DATABASE_URL:                         "postgresql://user:pass@localhost:5432/test"
+      DIRECT_URL:                           "postgresql://user:pass@localhost:5432/test"
+      NEXT_PUBLIC_APP_NAME:                 "GoLowLevel"
+      NEXT_PUBLIC_APP_URL:                  "http://localhost:3000"
+      NEXT_PUBLIC_SUPABASE_URL:             "https://placeholder.supabase.co"
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "placeholder_key"
+      SUPABASE_SECRET_KEY:                  "placeholder_secret"
+      AUTH_DISABLED:                        "true"
+      CREDENTIAL_ENCRYPTION_KEY:            "0000000000000000000000000000000000000000000000000000000000000000"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Type-check (tsc --noEmit)
+        run: npx tsc --noEmit
+
+      - name: Lint (eslint)
+        run: npx next lint --max-warnings 0
+
+      - name: Build (next build)
+        run: npm run build
+
+  # ─── Optional: run this job only when DB migration files change ────────────
+  validate-schema:
+    name: Validate Prisma schema
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+      - run: npm ci
+      - name: Validate schema
+        env:
+          DATABASE_URL: "postgresql://user:pass@localhost:5432/test"
+          DIRECT_URL:   "postgresql://user:pass@localhost:5432/test"
+        run: npx prisma validate

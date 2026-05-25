@@ -62,7 +62,14 @@ enum AuditAction {
   UPDATE
   DELETE
   LOGIN
+  LOGOUT
   INVITE
+  INVITE_ACCEPTED
+  DEACTIVATE
+  REACTIVATE
+  EXPORT
+  IMPORT
+  PERMISSION_DENIED
 }
 
 enum AutomationRunStatus {
@@ -105,34 +112,39 @@ model User {
   subAccountMemberships SubAccountMembership[]
   assignedContacts      Contact[]              @relation("AssignedContacts")
   auditLogs             AuditLog[]
+  sentInvites           UserInvite[]           @relation("SentInvites")
 }
 
 model Agency {
-  id           String             @id @default(uuid()) @db.Uuid
-  name         String
-  slug         String             @unique
-  timezone     String             @default("America/New_York")
-  currency     String             @default("USD")
-  country      String             @default("US")
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
-  members      AgencyMembership[]
-  subAccounts  SubAccount[]
-  tags         Tag[]
-  customFields CustomField[]
-  auditLogs    AuditLog[]
-  Contact      Contact[]
+  id                  String               @id @default(uuid()) @db.Uuid
+  name                String
+  slug                String               @unique
+  timezone            String               @default("America/New_York")
+  currency            String               @default("USD")
+  country             String               @default("US")
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  members             AgencyMembership[]
+  subAccounts         SubAccount[]
+  tags                Tag[]
+  customFields        CustomField[]
+  auditLogs           AuditLog[]
+  contacts            Contact[]
+  invites             UserInvite[]
+  providerCredentials ProviderCredential[]
 }
 
 model AgencyMembership {
-  id        String     @id @default(uuid()) @db.Uuid
-  agencyId  String     @db.Uuid
-  userId    String     @db.Uuid
-  role      AgencyRole @default(MEMBER)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
-  agency    Agency     @relation(fields: [agencyId], references: [id], onDelete: Cascade)
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String     @id @default(uuid()) @db.Uuid
+  agencyId      String     @db.Uuid
+  userId        String     @db.Uuid
+  role          AgencyRole @default(MEMBER)
+  invitedById   String?    @db.Uuid
+  deactivatedAt DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  agency        Agency     @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([agencyId, userId])
   @@index([userId])
@@ -209,7 +221,7 @@ model Contact {
   smsOptOut      Boolean            @default(false)
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
-  agency         Agency             @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  agency         Agency             @relation(fields: [agencyId], references: [id], onDelete: Cascade, map: "Contact_agencyId_fkey")
   subAccount     SubAccount         @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
   assignedUser   User?              @relation("AssignedContacts", fields: [assignedUserId], references: [id], onDelete: SetNull)
   tags           ContactTag[]
@@ -797,10 +809,61 @@ model AuditLog {
   entityId    String?
   metadata    Json?
   ipAddress   String?
+  userAgent   String?
   createdAt   DateTime    @default(now())
   agency      Agency      @relation(fields: [agencyId], references: [id], onDelete: Cascade)
   actor       User?       @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([agencyId, createdAt])
+  @@index([agencyId, action])
   @@index([actorUserId])
+}
+
+// Email-based invitation system — token sent to invitee, accepted via /invite/accept
+model UserInvite {
+  id          String     @id @default(uuid()) @db.Uuid
+  agencyId    String     @db.Uuid
+  email       String
+  role        AgencyRole @default(MEMBER)
+  token       String     @unique
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  revokedAt   DateTime?
+  invitedById String?    @db.Uuid
+  createdAt   DateTime   @default(now())
+  agency      Agency     @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  invitedBy   User?      @relation("SentInvites", fields: [invitedById], references: [id], onDelete: SetNull)
+
+  @@index([agencyId])
+  @@index([token])
+  @@index([email])
+}
+
+// Per-agency/sub-account provider credentials stored AES-256-GCM encrypted
+model ProviderCredential {
+  id            String     @id @default(uuid()) @db.Uuid
+  agencyId      String     @db.Uuid
+  subAccountId  String?    @db.Uuid
+  provider      String     // "twilio" | "smtp" | "stripe" | "google_calendar"
+  encryptedData String     @db.Text
+  iv            String
+  authTag       String
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  agency        Agency     @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+
+  @@unique([agencyId, subAccountId, provider])
+  @@index([agencyId])
+}
+
+// Tracks failed login attempts for rate limiting (augments in-memory limiter)
+model LoginAttempt {
+  id        String   @id @default(uuid()) @db.Uuid
+  ipAddress String
+  email     String?
+  success   Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([ipAddress, createdAt])
+  @@index([email, createdAt])
 }

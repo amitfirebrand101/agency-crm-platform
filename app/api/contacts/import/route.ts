@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { requireUser, canWriteSubAccount } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { rateLimit, LIMITS } from "@/lib/rate-limit";
+import { auditLog } from "@/lib/security";
 
 const MAX_CONTACTS = 10_000;
 
@@ -21,6 +23,16 @@ const contactRowSchema = z.object({
 });
 
 export async function POST(req: NextRequest) {
+  // Rate limit: 5 imports per minute per user/IP
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const rl = await rateLimit(LIMITS.importContacts, ip);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many import requests. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
+    );
+  }
+
   let user: Awaited<ReturnType<typeof requireUser>>;
   try {
     user = await requireUser();
@@ -118,6 +130,14 @@ export async function POST(req: NextRequest) {
       })
     );
   }
+
+  await auditLog({
+    agencyId:    user.agencyId,
+    actorUserId: user.id,
+    action:      "IMPORT",
+    entityType:  "Contact",
+    metadata:    { imported, skipped, errorCount: errors.length },
+  });
 
   return NextResponse.json({ imported, skipped, errors });
 }

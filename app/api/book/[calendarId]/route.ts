@@ -11,6 +11,7 @@ import { prisma } from "@/lib/prisma";
 import { getSlotsForDay } from "@/lib/booking";
 import { sendAppointmentConfirmation } from "@/lib/email";
 import { emailConfigured } from "@/lib/email";
+import { rateLimit, LIMITS } from "@/lib/rate-limit";
 
 type Ctx = { params: Promise<{ calendarId: string }> };
 
@@ -58,6 +59,15 @@ const bookingSchema = z.object({
 
 export async function POST(req: NextRequest, ctx: Ctx) {
   const { calendarId } = await ctx.params;
+
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const rl = await rateLimit(LIMITS.booking, ip);
+  if (!rl.allowed) {
+    return NextResponse.json(
+      { error: "Too many booking requests. Please wait a moment." },
+      { status: 429, headers: { "Retry-After": String(Math.ceil((rl.resetAt - Date.now()) / 1000)) } }
+    );
+  }
 
   let body: unknown;
   try {
