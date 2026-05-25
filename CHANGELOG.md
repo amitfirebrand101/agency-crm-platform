@@ -4,7 +4,7 @@
 
 ### Automations
 - Fixed IF/ELSE execution so the selected branch becomes the actual execution path, including steps that follow the branch.
-- Fixed WAIT persistence by storing `resumeAt` and a durable resume cursor for the remaining steps.
+- Fixed WAIT persistence by storing `resumeAt` and a durable resume cursor for the remaining steps. The resume route is present, but Vercel Hobby cannot run minute-level cron schedules.
 - Added support for WAIT steps inside IF/ELSE paths.
 - Added executable `CONTACT_TAG_REMOVED` and `PIPELINE_STAGE_CHANGED` triggers.
 - Wired contact update, tag removal, appointment status, opportunity created, opportunity status, and pipeline stage events into the automation dispatcher.

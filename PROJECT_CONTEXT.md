@@ -141,7 +141,7 @@ prisma/manual-sql/reset-and-init.sql
 - No rate limiter wired yet.
 - No CI/CD workflow yet.
 - No tests yet.
-- Wait/delay action can resume through the protected cron route, but production Vercel Cron must be configured and monitored; Inngest/QStash/Trigger.dev is still recommended for scale.
+- Wait/delay action can resume through the protected resume route, but Vercel Hobby cannot run minute-level cron schedules; use an external scheduler/queue or upgrade Vercel before relying on automatic waits.
 - Send Email and Send SMS actions are cataloged but not provider-backed.
 - Many HighLevel-parity actions/triggers still require their owning modules or external providers first (Stripe, Twilio/Telnyx, email, Google Sheets, Meta, Google Ads, courses, communities, IVR).
 - Import/export, duplicate detection, bulk actions for contacts not yet implemented.
@@ -153,7 +153,7 @@ prisma/manual-sql/reset-and-init.sql
 
 1. Apply `prisma/manual-sql/add-automation-runs.sql` in Supabase SQL Editor.
 2. Configure Google OAuth in Supabase and remove `AUTH_DISABLED`.
-3. Configure Vercel Cron for `/api/cron/automations/resume` with `CRON_SECRET`, then choose a queue provider for higher-volume WAIT steps (Inngest recommended for Vercel).
+3. Configure an external scheduler/queue for `/api/cron/automations/resume` with `CRON_SECRET`, or upgrade Vercel for frequent cron; Inngest is recommended for production WAIT steps.
 4. Add Twilio or Telnyx credentials for SMS/calling.
 5. Add email provider (SendGrid/Postmark) for Send Email action.
 6. Add rate limiting for public endpoints (inbound webhook, auth routes).
