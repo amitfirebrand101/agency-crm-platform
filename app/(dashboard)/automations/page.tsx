@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Bot, ChevronRight, Clock, Plus, Zap } from "lucide-react";
+import { Bot, ChevronRight, Clock, Plus, TrendingDown, Zap } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { createWorkflow, duplicateWorkflow } from "@/app/(dashboard)/automations/actions";
 import { Badge, statusVariant } from "@/components/ui/badge";
@@ -8,9 +8,14 @@ import { DbWarning } from "@/components/ui/db-warning";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { parseDefinition } from "@/lib/automations/schema";
+import { triggerCatalog } from "@/lib/automations/catalog";
 
-type AutomationWithRuns = Prisma.AutomationGetPayload<{
-  include: { runs: { orderBy: { startedAt: "desc" }; take: 1 } };
+type AutomationRow = Prisma.AutomationGetPayload<{
+  include: {
+    runs: { orderBy: { startedAt: "desc" }; take: 1 };
+    _count: { select: { runs: true } };
+  };
 }>;
 
 export default async function AutomationsPage() {
@@ -30,14 +35,25 @@ export default async function AutomationsPage() {
 
 async function AutomationsContent() {
   const user = await requireUser();
-  let automations: AutomationWithRuns[] = [];
+  let automations: AutomationRow[] = [];
+  let failedRunCount = 0;
   let databaseUnavailable = false;
 
   try {
     automations = await prisma.automation.findMany({
       where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
       orderBy: { updatedAt: "desc" },
-      include: { runs: { orderBy: { startedAt: "desc" }, take: 1 } }
+      include: {
+        runs: { orderBy: { startedAt: "desc" }, take: 1 },
+        _count: { select: { runs: true } },
+      },
+    });
+    failedRunCount = await prisma.automationRun.count({
+      where: {
+        agencyId: user.agencyId,
+        subAccountId: user.subAccountId ?? undefined,
+        status: "FAILED",
+      },
     });
   } catch (err) {
     databaseUnavailable = true;
@@ -69,31 +85,32 @@ async function AutomationsContent() {
 
       {databaseUnavailable ? <DbWarning /> : null}
 
-      {/* Stats */}
       {automations.length > 0 ? (
-        <div className="grid grid-cols-3 gap-4 md:w-96">
-          <Card>
-            <CardBody>
-              <div className="text-2xl font-bold">{automations.length}</div>
-              <div className="text-xs text-muted mt-0.5">Total</div>
-            </CardBody>
-          </Card>
-          <Card>
-            <CardBody>
-              <div className="text-2xl font-bold text-emerald-600">{published}</div>
-              <div className="text-xs text-muted mt-0.5">Live</div>
-            </CardBody>
-          </Card>
-          <Card>
-            <CardBody>
-              <div className="text-2xl font-bold text-muted">{draft}</div>
-              <div className="text-xs text-muted mt-0.5">Draft</div>
-            </CardBody>
-          </Card>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 sm:w-auto">
+          <Card><CardBody>
+            <div className="text-2xl font-bold">{automations.length}</div>
+            <div className="text-xs text-muted mt-0.5">Total</div>
+          </CardBody></Card>
+          <Card><CardBody>
+            <div className="text-2xl font-bold text-emerald-600">{published}</div>
+            <div className="text-xs text-muted mt-0.5">Live</div>
+          </CardBody></Card>
+          <Card><CardBody>
+            <div className="text-2xl font-bold text-muted">{draft}</div>
+            <div className="text-xs text-muted mt-0.5">Draft</div>
+          </CardBody></Card>
+          <Card><CardBody>
+            <div className={`text-2xl font-bold ${failedRunCount > 0 ? "text-red-600" : "text-muted"}`}>
+              {failedRunCount}
+            </div>
+            <div className="text-xs text-muted mt-0.5 flex items-center gap-1">
+              {failedRunCount > 0 && <TrendingDown size={10} className="text-red-500" />}
+              Failures
+            </div>
+          </CardBody></Card>
         </div>
       ) : null}
 
-      {/* Workflow list */}
       {automations.length > 0 ? (
         <Card>
           <CardHeader>
@@ -105,40 +122,64 @@ async function AutomationsContent() {
           <div className="divide-y divide-border">
             {automations.map((automation) => {
               const lastRun = automation.runs[0] ?? null;
+              const def = parseDefinition(automation.definition);
+              const triggerLabel = def.triggers[0]
+                ? (triggerCatalog.find((t) => t.type === def.triggers[0].type)?.label ?? def.triggers[0].type)
+                : null;
+
               return (
-                <div className="flex items-center gap-4 px-5 py-4 hover:bg-background/50 transition" key={automation.id}>
-                  <span className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${automation.status === "published" ? "bg-primary/10 text-primary" : "bg-muted/20 text-muted"}`}>
+                <div
+                  className="flex items-center gap-4 px-5 py-4 hover:bg-background/50 transition"
+                  key={automation.id}
+                >
+                  <span
+                    className={`flex size-9 shrink-0 items-center justify-center rounded-xl ${
+                      automation.status === "published"
+                        ? "bg-primary/10 text-primary"
+                        : "bg-muted/20 text-muted"
+                    }`}
+                  >
                     <Zap size={16} />
                   </span>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium truncate">{automation.name}</span>
                       <Badge variant={automation.status === "published" ? "success" : "muted"}>
                         {automation.status}
                       </Badge>
                     </div>
-                    <div className="mt-0.5 flex items-center gap-3 text-xs text-muted">
+                    <div className="mt-0.5 flex items-center gap-3 text-xs text-muted flex-wrap">
+                      {triggerLabel && (
+                        <span className="flex items-center gap-1">
+                          <Zap size={9} /> {triggerLabel}
+                          {def.triggers.length > 1 && ` +${def.triggers.length - 1}`}
+                        </span>
+                      )}
+                      <span>{automation._count.runs} run{automation._count.runs !== 1 ? "s" : ""}</span>
                       {lastRun ? (
                         <span className="flex items-center gap-1">
                           <Clock size={10} />
-                          Last run {new Date(lastRun.startedAt).toLocaleDateString()}
+                          Last {new Date(lastRun.startedAt).toLocaleDateString()}
                           {" · "}
                           <Badge variant={statusVariant(lastRun.status)} className="text-[10px]">
-                            {lastRun.status}
+                            {lastRun.status.toLowerCase()}
                           </Badge>
                         </span>
-                      ) : (
-                        <span>No runs yet</span>
-                      )}
-                      <span>Updated {new Date(automation.updatedAt).toLocaleDateString()}</span>
+                      ) : null}
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
+                    <Link
+                      href={`/automations/${automation.id}/runs`}
+                      className="hidden rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-background hover:text-foreground transition sm:flex"
+                    >
+                      Runs
+                    </Link>
                     <form action={duplicateWorkflow}>
                       <input name="automationId" type="hidden" value={automation.id} />
                       <SubmitButton
-                        className="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-background hover:text-foreground transition"
-                        pendingText="Duplicating…"
+                        className="hidden rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-background hover:text-foreground transition sm:flex"
+                        pendingText="Copying…"
                       >
                         Duplicate
                       </SubmitButton>
@@ -162,7 +203,9 @@ async function AutomationsContent() {
             <div className="py-12 text-center">
               <Bot className="mx-auto mb-4 text-muted" size={36} />
               <p className="font-semibold text-foreground">No workflows yet</p>
-              <p className="mt-1 text-sm text-muted">Click &ldquo;New Workflow&rdquo; to build your first automation.</p>
+              <p className="mt-1 text-sm text-muted">
+                Click &ldquo;New Workflow&rdquo; to build your first automation.
+              </p>
               <form action={createWorkflow} className="mt-5 inline-block">
                 <SubmitButton
                   className="flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-white hover:opacity-90 transition"

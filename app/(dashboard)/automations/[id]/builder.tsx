@@ -3,9 +3,11 @@
 import { useCallback, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
+  AlertCircle,
   ArrowLeft,
   CheckCircle2,
   GripVertical,
+  History,
   Play,
   Plus,
   Save,
@@ -24,6 +26,7 @@ import {
 import type { ActionDef, ConfigField, TriggerDef } from "@/lib/automations/catalog";
 import { parseAutomationDefinition } from "@/lib/automations/types";
 import type { AutomationDefinition, AutomationStep, AutomationTrigger } from "@/lib/automations/types";
+import { validateDefinition } from "@/lib/automations/schema";
 import { renameWorkflow, saveDefinition } from "./actions";
 import { deleteWorkflow, publishWorkflow, runTestWorkflow, unpublishWorkflow } from "../actions";
 
@@ -58,7 +61,14 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
   const [dragId, setDragId] = useState<string | null>(null);
   const [dropId, setDropId] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const nameRef = useRef<HTMLInputElement>(null);
+
+  const runValidation = useCallback(() => {
+    const { errors } = validateDefinition(definition);
+    setValidationErrors(errors);
+    return errors;
+  }, [definition]);
 
   const mutate = useCallback((updater: (prev: AutomationDefinition) => AutomationDefinition) => {
     setDefinition(updater);
@@ -79,6 +89,10 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
   };
 
   const handlePublish = async () => {
+    if (status !== "published") {
+      const errors = runValidation();
+      if (errors.length > 0) return; // validation panel shows errors
+    }
     if (dirty) await handleSave();
     const fd = new FormData();
     fd.set("automationId", automation.id);
@@ -90,6 +104,7 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
         } else {
           await publishWorkflow(fd);
           setStatus("published");
+          setValidationErrors([]);
         }
       } catch (err) {
         alert(String(err instanceof Error ? err.message : err));
@@ -102,7 +117,7 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
     const id = crypto.randomUUID();
     const newTrigger: AutomationTrigger = {
       id,
-      type: def.type,
+      type: def.type as AutomationTrigger["type"],
       name: def.label,
       config: def.type === "INBOUND_WEBHOOK" ? { token: crypto.randomUUID() } : {},
     };
@@ -132,7 +147,7 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
   // Step operations
   const addStep = (def: ActionDef, insertAt: number) => {
     const id = crypto.randomUUID();
-    const newStep: AutomationStep = { id, type: def.type, name: def.label, config: {} };
+    const newStep: AutomationStep = { id, type: def.type as AutomationStep["type"], name: def.label, config: {} };
     mutate((prev) => {
       const steps = [...prev.steps];
       steps.splice(insertAt, 0, newStep);
@@ -218,6 +233,13 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href={`/automations/${automation.id}/runs`}
+            className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm font-medium text-muted hover:bg-background hover:text-foreground transition"
+          >
+            <History size={12} />
+            <span className="hidden sm:inline">Runs</span>
+          </Link>
           <form action={runTestWorkflow}>
             <input name="automationId" type="hidden" value={automation.id} />
             <input name="contactId" type="hidden" value={contacts[0]?.id ?? ""} />
@@ -263,6 +285,29 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
           </form>
         </div>
       </div>
+
+      {/* ─── Validation banner ───────────────────────────────────────── */}
+      {validationErrors.length > 0 && (
+        <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2">
+          <div className="flex items-start gap-2">
+            <AlertCircle size={14} className="mt-0.5 shrink-0 text-amber-600" />
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-amber-700">Fix before publishing</p>
+              <ul className="mt-0.5 list-disc list-inside space-y-0.5">
+                {validationErrors.slice(0, 3).map((e, i) => (
+                  <li key={i} className="text-xs text-amber-700">{e}</li>
+                ))}
+                {validationErrors.length > 3 && (
+                  <li className="text-xs text-amber-700">…and {validationErrors.length - 3} more</li>
+                )}
+              </ul>
+            </div>
+            <button onClick={() => setValidationErrors([])} className="shrink-0 text-amber-500 hover:text-amber-700" type="button">
+              <X size={13} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ─── Main Area ───────────────────────────────────────────────── */}
       <div className="flex flex-1 overflow-hidden">
@@ -374,7 +419,7 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
               <ConfigForm
                 appUrl={appUrl}
                 automationId={automation.id}
-                config={selectedTrigger.config}
+                config={selectedTrigger.config as Record<string, string>}
                 configFields={getTriggerDef(selectedTrigger.type)?.configFields}
                 label={selectedTrigger.name}
                 nodeType="trigger"
@@ -387,7 +432,7 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
               <ConfigForm
                 appUrl={appUrl}
                 automationId={automation.id}
-                config={selectedStep.config}
+                config={selectedStep.config as Record<string, string>}
                 configFields={getActionDef(selectedStep.type)?.configFields}
                 label={selectedStep.name}
                 nodeType="step"

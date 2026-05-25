@@ -66,11 +66,32 @@ enum AuditAction {
 }
 
 enum AutomationRunStatus {
+  QUEUED
   RUNNING
   WAITING
   COMPLETED
   FAILED
   CANCELLED
+}
+
+enum AutomationVersionStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum AutomationEnrollmentStatus {
+  ACTIVE
+  WAITING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum AutomationWebhookDeliveryStatus {
+  PENDING
+  SUCCESS
+  FAILED
 }
 
 model User {
@@ -359,52 +380,157 @@ model Appointment {
 }
 
 model Automation {
-  id           String          @id @default(uuid()) @db.Uuid
-  agencyId     String          @db.Uuid
-  subAccountId String          @db.Uuid
-  name         String
-  status       String          @default("draft")
-  definition   Json            @default("{}")
-  createdAt    DateTime        @default(now())
-  updatedAt    DateTime        @updatedAt
-  subAccount   SubAccount      @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
-  runs         AutomationRun[]
+  id                String                      @id @default(uuid()) @db.Uuid
+  agencyId          String                      @db.Uuid
+  subAccountId      String                      @db.Uuid
+  name              String
+  status            String                      @default("draft")
+  definition        Json                        @default("{}")
+  createdAt         DateTime                    @default(now())
+  updatedAt         DateTime                    @updatedAt
+  subAccount        SubAccount                  @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  runs              AutomationRun[]
+  versions          AutomationVersion[]
+  enrollments       AutomationEnrollment[]
+  webhookDeliveries AutomationWebhookDelivery[]
 
   @@index([agencyId, subAccountId])
 }
 
+model AutomationVersion {
+  id            String                  @id @default(uuid()) @db.Uuid
+  automationId  String                  @db.Uuid
+  agencyId      String                  @db.Uuid
+  subAccountId  String                  @db.Uuid
+  versionNumber Int
+  name          String
+  definition    Json
+  status        AutomationVersionStatus @default(DRAFT)
+  createdById   String?                 @db.Uuid
+  createdAt     DateTime                @default(now())
+  publishedAt   DateTime?
+  automation    Automation              @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  enrollments   AutomationEnrollment[]
+  runs          AutomationRun[]
+
+  @@unique([automationId, versionNumber])
+  @@index([agencyId, subAccountId])
+  @@index([automationId, status])
+}
+
+model AutomationEnrollment {
+  id             String                     @id @default(uuid()) @db.Uuid
+  automationId   String                     @db.Uuid
+  versionId      String                     @db.Uuid
+  agencyId       String                     @db.Uuid
+  subAccountId   String                     @db.Uuid
+  contactId      String?                    @db.Uuid
+  eventKey       String
+  triggerType    String
+  status         AutomationEnrollmentStatus @default(ACTIVE)
+  currentStepId  String?
+  context        Json                       @default("{}")
+  idempotencyKey String
+  resumeAt       DateTime?
+  startedAt      DateTime                   @default(now())
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+  createdAt      DateTime                   @default(now())
+  updatedAt      DateTime                   @updatedAt
+  automation     Automation                 @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  version        AutomationVersion          @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  runs           AutomationRun[]
+
+  @@unique([idempotencyKey, subAccountId])
+  @@index([agencyId, subAccountId])
+  @@index([automationId, status])
+  @@index([subAccountId, contactId])
+  @@index([status, resumeAt])
+}
+
 model AutomationRun {
-  id           String              @id @default(uuid()) @db.Uuid
-  automationId String              @db.Uuid
-  agencyId     String              @db.Uuid
-  subAccountId String              @db.Uuid
-  contactId    String?             @db.Uuid
-  status       AutomationRunStatus @default(RUNNING)
+  id           String                @id @default(uuid()) @db.Uuid
+  enrollmentId String?               @db.Uuid
+  automationId String                @db.Uuid
+  versionId    String?               @db.Uuid
+  agencyId     String                @db.Uuid
+  subAccountId String                @db.Uuid
+  contactId    String?               @db.Uuid
+  status       AutomationRunStatus   @default(RUNNING)
   triggerType  String
   payload      Json?
-  startedAt    DateTime            @default(now())
+  startedAt    DateTime              @default(now())
   completedAt  DateTime?
   error        String?
-  automation   Automation          @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  enrollment   AutomationEnrollment? @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  version      AutomationVersion?    @relation(fields: [versionId], references: [id], onDelete: SetNull)
+  automation   Automation            @relation(fields: [automationId], references: [id], onDelete: Cascade)
   stepRuns     AutomationStepRun[]
 
   @@index([automationId])
   @@index([agencyId, subAccountId, startedAt])
+  @@index([enrollmentId])
 }
 
 model AutomationStepRun {
-  id        String        @id @default(uuid()) @db.Uuid
-  runId     String        @db.Uuid
-  stepId    String
-  stepType  String
-  stepName  String
-  status    String
-  output    Json?
-  error     String?
-  startedAt DateTime      @default(now())
-  endedAt   DateTime?
-  run       AutomationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  id           String        @id @default(uuid()) @db.Uuid
+  runId        String        @db.Uuid
+  enrollmentId String?       @db.Uuid
+  automationId String?       @db.Uuid
+  agencyId     String?       @db.Uuid
+  subAccountId String?       @db.Uuid
+  stepId       String
+  stepType     String
+  stepName     String?
+  status       String
+  input        Json          @default("{}")
+  output       Json?
+  error        Json?
+  startedAt    DateTime?
+  endedAt      DateTime?
+  createdAt    DateTime      @default(now())
+  run          AutomationRun @relation(fields: [runId], references: [id], onDelete: Cascade)
 
+  @@index([runId])
+  @@index([enrollmentId])
+}
+
+model AutomationEvent {
+  id             String   @id @default(uuid()) @db.Uuid
+  agencyId       String   @db.Uuid
+  subAccountId   String   @db.Uuid
+  type           String
+  source         String
+  contactId      String?  @db.Uuid
+  payload        Json
+  idempotencyKey String?
+  createdAt      DateTime @default(now())
+
+  @@index([agencyId, subAccountId, type])
+  @@index([subAccountId, contactId])
+  @@index([idempotencyKey])
+}
+
+model AutomationWebhookDelivery {
+  id           String                          @id @default(uuid()) @db.Uuid
+  agencyId     String                          @db.Uuid
+  subAccountId String                          @db.Uuid
+  automationId String                          @db.Uuid
+  runId        String?                         @db.Uuid
+  stepRunId    String?                         @db.Uuid
+  url          String
+  method       String                          @default("POST")
+  status       AutomationWebhookDeliveryStatus @default(PENDING)
+  request      Json
+  response     Json?
+  error        Json?
+  attempt      Int                             @default(1)
+  createdAt    DateTime                        @default(now())
+  updatedAt    DateTime                        @updatedAt
+  automation   Automation                      @relation(fields: [automationId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId, subAccountId])
+  @@index([automationId])
   @@index([runId])
 }
 
