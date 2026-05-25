@@ -639,7 +639,10 @@ function NodePicker({ items, onSelect, type }: NodePickerProps) {
     const isAction = "color" in def;
     return (
       <button
-        className="flex w-full items-start gap-3 rounded-xl p-3 text-left hover:bg-background transition"
+        className={`flex w-full items-start gap-3 rounded-xl p-3 text-left transition ${
+          def.executable ? "hover:bg-background" : "cursor-not-allowed opacity-55"
+        }`}
+        disabled={!def.executable}
         key={def.type}
         onClick={() => onSelect(def)}
         type="button"

@@ -72,6 +72,10 @@ export const triggerCatalog: TriggerDef[] = [
     type: "CONTACT_TAG", label: "Tag Added to Contact", description: "Fires when a specific tag is applied", category: "Contact", icon: Tag, executable: true,
     configFields: [{ key: "tagName", label: "Tag Name", type: "text", placeholder: "lead, customer…", required: true }]
   },
+  {
+    type: "CONTACT_TAG_REMOVED", label: "Tag Removed from Contact", description: "Fires when a specific tag is removed", category: "Contact", icon: Tag, executable: true,
+    configFields: [{ key: "tagName", label: "Tag Name", type: "text", placeholder: "lead, customer…", required: true }]
+  },
   { type: "NOTE_ADDED", label: "Note Added", description: "Fires when a note is added to a contact", category: "Contact", icon: StickyNote, executable: false },
   { type: "TASK_COMPLETED", label: "Task Completed", description: "Fires when a task is marked complete", category: "Contact", icon: CheckSquare, executable: false },
   {
@@ -96,7 +100,7 @@ export const triggerCatalog: TriggerDef[] = [
       options: [{ value: "", label: "Any status" }, { value: "won", label: "Won" }, { value: "lost", label: "Lost" }, { value: "abandoned", label: "Abandoned" }]
     }]
   },
-  { type: "PIPELINE_STAGE_CHANGED", label: "Pipeline Stage Changed", description: "Fires when an opportunity moves stages", category: "Opportunities", icon: ArrowRight, executable: false },
+  { type: "PIPELINE_STAGE_CHANGED", label: "Pipeline Stage Changed", description: "Fires when an opportunity moves stages", category: "Opportunities", icon: ArrowRight, executable: true },
   // Events
   {
     type: "FORM_SUBMITTED", label: "Form Submitted", description: "Fires when a form is submitted", category: "Events", icon: FileText, executable: false,
@@ -156,12 +160,30 @@ export const actionCatalog: ActionDef[] = [
   },
   {
     type: "ASSIGN_TO_USER", label: "Assign to User", description: "Assign the contact to a team member",
-    category: "Contact", icon: UserCheck, color: "bg-blue-600", colorLight: "bg-blue-50", executable: false,
+    category: "Contact", icon: UserCheck, color: "bg-blue-600", colorLight: "bg-blue-50", executable: true,
     configFields: [{ key: "userId", label: "User Email", type: "text", placeholder: "user@agency.com" }]
   },
   {
+    type: "REMOVE_ASSIGNED_USER", label: "Remove Assigned User", description: "Clear the current assigned user from the contact",
+    category: "Contact", icon: UserMinus, color: "bg-blue-600", colorLight: "bg-blue-50", executable: true,
+  },
+  {
+    type: "SET_DND", label: "Set Do Not Disturb", description: "Enable or disable email/SMS opt-out flags",
+    category: "Contact", icon: Bell, color: "bg-blue-600", colorLight: "bg-blue-50", executable: true,
+    configFields: [
+      {
+        key: "channel", label: "Channel", type: "select",
+        options: [{ value: "both", label: "Email and SMS" }, { value: "email", label: "Email" }, { value: "sms", label: "SMS" }]
+      },
+      {
+        key: "enabled", label: "DND Enabled", type: "select",
+        options: [{ value: "true", label: "Enabled" }, { value: "false", label: "Disabled" }]
+      }
+    ]
+  },
+  {
     type: "ADD_NOTE", label: "Add Note", description: "Append a note to the contact record",
-    category: "Contact", icon: StickyNote, color: "bg-blue-600", colorLight: "bg-blue-50", executable: false,
+    category: "Contact", icon: StickyNote, color: "bg-blue-600", colorLight: "bg-blue-50", executable: true,
     configFields: [{ key: "note", label: "Note", type: "textarea", placeholder: "Contact moved to new stage…" }]
   },
   {
@@ -174,7 +196,8 @@ export const actionCatalog: ActionDef[] = [
   },
   {
     type: "DELETE_CONTACT", label: "Delete Contact", description: "Permanently remove the contact",
-    category: "Contact", icon: UserMinus, color: "bg-red-600", colorLight: "bg-red-50", executable: false,
+    category: "Contact", icon: UserMinus, color: "bg-red-600", colorLight: "bg-red-50", executable: true,
+    configFields: [{ key: "confirm", label: "Type DELETE to confirm", type: "text", placeholder: "DELETE", required: true }]
   },
   // Communication
   {
@@ -192,7 +215,7 @@ export const actionCatalog: ActionDef[] = [
   },
   {
     type: "SEND_INTERNAL_NOTIFICATION", label: "Internal Notification", description: "Notify a team member about this contact",
-    category: "Communication", icon: Bell, color: "bg-emerald-600", colorLight: "bg-emerald-50", executable: false,
+    category: "Communication", icon: Bell, color: "bg-emerald-600", colorLight: "bg-emerald-50", executable: true,
     configFields: [{ key: "message", label: "Message", type: "textarea", placeholder: "New lead: {{contact.name}}", required: true }]
   },
   {
@@ -206,7 +229,7 @@ export const actionCatalog: ActionDef[] = [
       { key: "subject", label: "Subject", type: "text", placeholder: "Automation conversation" },
       {
         key: "channel", label: "Channel", type: "select",
-        options: [{ value: "SMS", label: "SMS" }, { value: "Email", label: "Email" }]
+        options: [{ value: "SMS", label: "SMS" }, { value: "EMAIL", label: "Email" }, { value: "INTERNAL_NOTE", label: "Internal note" }]
       }
     ]
   },
@@ -221,7 +244,7 @@ export const actionCatalog: ActionDef[] = [
   },
   {
     type: "UPDATE_OPPORTUNITY", label: "Update Opportunity", description: "Update an opportunity's status",
-    category: "Opportunities", icon: TrendingUp, color: "bg-violet-600", colorLight: "bg-violet-50", executable: false,
+    category: "Opportunities", icon: TrendingUp, color: "bg-violet-600", colorLight: "bg-violet-50", executable: true,
     configFields: [{
       key: "status", label: "Status", type: "select",
       options: [{ value: "open", label: "Open" }, { value: "won", label: "Won" }, { value: "lost", label: "Lost" }]
@@ -230,7 +253,7 @@ export const actionCatalog: ActionDef[] = [
   // Appointments
   {
     type: "UPDATE_APPOINTMENT_STATUS", label: "Update Appointment", description: "Change the status of an appointment",
-    category: "Appointments", icon: Calendar, color: "bg-cyan-600", colorLight: "bg-cyan-50", executable: false,
+    category: "Appointments", icon: Calendar, color: "bg-cyan-600", colorLight: "bg-cyan-50", executable: true,
     configFields: [{
       key: "status", label: "Status", type: "select",
       options: [{ value: "confirmed", label: "Confirmed" }, { value: "cancelled", label: "Cancelled" }, { value: "no_show", label: "No show" }, { value: "completed", label: "Completed" }]
@@ -276,7 +299,7 @@ export const actionCatalog: ActionDef[] = [
   },
   {
     type: "REMOVE_FROM_WORKFLOW", label: "End Workflow", description: "Stop processing this contact here",
-    category: "Flow Control", icon: UserMinus, color: "bg-slate-500", colorLight: "bg-slate-100", executable: false,
+    category: "Flow Control", icon: UserMinus, color: "bg-slate-500", colorLight: "bg-slate-100", executable: true,
   },
   // Integrations
   {

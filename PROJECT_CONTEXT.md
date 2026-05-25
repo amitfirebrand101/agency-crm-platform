@@ -106,6 +106,9 @@ NEXT_PUBLIC_APP_URL=https://agency-crm-platform.vercel.app
 - Opportunity CRUD: pipeline+stage CRUD, kanban board, stage moves, won/lost.
 - Automation CRUD: workflow builder, trigger+action CRUD, publish/unpublish, delete, run history.
 - Automation executor: DB run tracking, If/Else branching, outbound webhook with SSRF guard.
+- Automation engine now persists WAIT resume cursors, supports WAIT inside selected IF/ELSE paths, and disables non-executable picker items.
+- Automation event dispatch is wired for contact updates, tag removal, appointment status changes, opportunity create/status changes, and pipeline stage moves.
+- Internal automation actions now include assignment/removal, DND flags, notes/internal notifications, opportunity update, appointment status update, guarded contact deletion, tags, conversations, contacts, webhooks, IF/ELSE, and WAIT.
 - Inbound webhook trigger with token auth.
 - Dashboard: real metrics (contacts, open conversations, pipeline value, appointments, automation runs).
 - Settings: agency profile edit, team members, audit log.
@@ -138,8 +141,9 @@ prisma/manual-sql/reset-and-init.sql
 - No rate limiter wired yet.
 - No CI/CD workflow yet.
 - No tests yet.
-- Wait/delay action is recorded but not backed by a real queue (Inngest/QStash/Trigger.dev recommended).
+- Wait/delay action can resume through the protected cron route, but production Vercel Cron must be configured and monitored; Inngest/QStash/Trigger.dev is still recommended for scale.
 - Send Email and Send SMS actions are cataloged but not provider-backed.
+- Many HighLevel-parity actions/triggers still require their owning modules or external providers first (Stripe, Twilio/Telnyx, email, Google Sheets, Meta, Google Ads, courses, communities, IVR).
 - Import/export, duplicate detection, bulk actions for contacts not yet implemented.
 - Drag-and-drop Kanban (needs a DnD library like @dnd-kit).
 - Sub-account switcher for multi-sub-account access not yet implemented.
@@ -149,7 +153,7 @@ prisma/manual-sql/reset-and-init.sql
 
 1. Apply `prisma/manual-sql/add-automation-runs.sql` in Supabase SQL Editor.
 2. Configure Google OAuth in Supabase and remove `AUTH_DISABLED`.
-3. Choose and integrate a queue provider for WAIT steps (Inngest recommended for Vercel).
+3. Configure Vercel Cron for `/api/cron/automations/resume` with `CRON_SECRET`, then choose a queue provider for higher-volume WAIT steps (Inngest recommended for Vercel).
 4. Add Twilio or Telnyx credentials for SMS/calling.
 5. Add email provider (SendGrid/Postmark) for Send Email action.
 6. Add rate limiting for public endpoints (inbound webhook, auth routes).

@@ -13,6 +13,7 @@ export type StepContext = {
   automationId: string;
   agencyId: string;
   subAccountId: string;
+  runId?: string | null;
   contactId?: string | null;
   payload?: Record<string, unknown>;
   actorUserId?: string | null;
@@ -48,7 +49,13 @@ async function evaluateCondition(step: StepNode, ctx: StepContext): Promise<bool
   if (!ctx.contactId) return false;
 
   if (conditionType === "contact.hasTag") {
-    const tag = await prisma.tag.findFirst({ where: { name: tagName, agencyId: ctx.agencyId } });
+    const tag = await prisma.tag.findFirst({
+      where: {
+        name: tagName ?? value,
+        agencyId: ctx.agencyId,
+        subAccountId: ctx.subAccountId,
+      },
+    });
     if (!tag) return false;
     const ct = await prisma.contactTag.findUnique({
       where: { contactId_tagId: { contactId: ctx.contactId, tagId: tag.id } },
@@ -59,7 +66,8 @@ async function evaluateCondition(step: StepNode, ctx: StepContext): Promise<bool
   if (conditionType === "contact.fieldEquals" || conditionType === "contact.field.equals") {
     const contact = await prisma.contact.findUnique({ where: { id: ctx.contactId } });
     if (!contact) return false;
-    const fieldValue = (contact as Record<string, unknown>)[field ?? ""];
+    const fieldKey = field || String(ctx.payload?.field ?? "");
+    const fieldValue = (contact as Record<string, unknown>)[fieldKey];
     return String(fieldValue ?? "") === (value ?? "");
   }
 
@@ -128,17 +136,59 @@ export async function executeStep(step: StepNode, ctx: StepContext): Promise<Ste
       return { status: "FAILED", error: String(e) };
     }
     try {
+      const delivery = await prisma.automationWebhookDelivery.create({
+        data: {
+          agencyId: ctx.agencyId,
+          subAccountId: ctx.subAccountId,
+          automationId: ctx.automationId,
+          runId: ctx.runId && ctx.runId !== "no-run" ? ctx.runId : null,
+          url,
+          method: "POST",
+          status: "PENDING",
+          request: {
+            automationId: ctx.automationId,
+            contactId: ctx.contactId,
+            triggerPayload: ctx.payload,
+          } as Prisma.InputJsonValue,
+        },
+      }).catch(() => null);
       const result = await safeWebhookFetch(url, {
         automationId: ctx.automationId,
         contactId: ctx.contactId,
         triggerPayload: ctx.payload,
       });
+      if (delivery) {
+        await prisma.automationWebhookDelivery.update({
+          where: { id: delivery.id },
+          data: {
+            status: result.ok ? "SUCCESS" : "FAILED",
+            response: {
+              httpStatus: result.status,
+              body: result.body,
+            } as Prisma.InputJsonValue,
+            error: result.ok ? undefined : ({ message: `HTTP ${result.status}` } as Prisma.InputJsonValue),
+          },
+        }).catch(() => undefined);
+      }
       return {
         status: result.ok ? "COMPLETED" : "FAILED",
         output: { httpStatus: result.status, responseBody: result.body },
         ...(!result.ok && { error: `HTTP ${result.status}` }),
       };
     } catch (err) {
+      await prisma.automationWebhookDelivery.create({
+        data: {
+          agencyId: ctx.agencyId,
+          subAccountId: ctx.subAccountId,
+          automationId: ctx.automationId,
+          runId: ctx.runId && ctx.runId !== "no-run" ? ctx.runId : null,
+          url,
+          method: "POST",
+          status: "FAILED",
+          request: { triggerPayload: ctx.payload } as Prisma.InputJsonValue,
+          error: { message: String(err) } as Prisma.InputJsonValue,
+        },
+      }).catch(() => undefined);
       return { status: "FAILED", error: `Webhook fetch failed: ${String(err)}` };
     }
   }
@@ -171,13 +221,41 @@ export async function executeStep(step: StepNode, ctx: StepContext): Promise<Ste
     return { status: "SKIPPED", error: "Step requires a contact in context." };
   }
 
+  // ── SET_DND ────────────────────────────────────────────────────────────────
+  if (step.type === "SET_DND") {
+    const channel = step.config.channel ?? "both";
+    const enabled = step.config.enabled === "true";
+    const data: Prisma.ContactUpdateInput = {};
+    if (channel === "email" || channel === "both") data.emailOptOut = enabled;
+    if (channel === "sms" || channel === "both") data.smsOptOut = enabled;
+    await prisma.contact.update({
+      where: { id: ctx.contactId, agencyId: ctx.agencyId, subAccountId: ctx.subAccountId },
+      data,
+    });
+    return { status: "COMPLETED", output: { channel, dndEnabled: enabled } };
+  }
+
+  // ── REMOVE_ASSIGNED_USER ───────────────────────────────────────────────────
+  if (step.type === "REMOVE_ASSIGNED_USER") {
+    await prisma.contact.update({
+      where: { id: ctx.contactId, agencyId: ctx.agencyId, subAccountId: ctx.subAccountId },
+      data: { assignedUserId: null },
+    });
+    return { status: "COMPLETED", output: { assignedUserId: null } };
+  }
+
   // ── UPDATE_CONTACT_FIELD ────────────────────────────────────────────────────
   if (step.type === "UPDATE_CONTACT_FIELD") {
-    const ALLOWED = new Set(["firstName","lastName","email","phone","companyName","source","timezone"]);
+    const ALLOWED = new Set(["firstName","lastName","email","phone","companyName","source","timezone","status"]);
     const field = step.config.field;
-    const value = step.config.value ?? "";
+    const value = field === "status"
+      ? (step.config.value ?? "").toUpperCase()
+      : (step.config.value ?? "");
     if (!field || !ALLOWED.has(field)) {
       return { status: "SKIPPED", error: `Field "${field}" is not allowed.` };
+    }
+    if (field === "status" && !["LEAD", "CUSTOMER", "INACTIVE"].includes(value)) {
+      return { status: "SKIPPED", error: "Status must be lead, customer, or inactive." };
     }
     await prisma.contact.update({
       where: { id: ctx.contactId, agencyId: ctx.agencyId, subAccountId: ctx.subAccountId },
@@ -228,6 +306,41 @@ export async function executeStep(step: StepNode, ctx: StepContext): Promise<Ste
         subject: step.config.subject?.trim() || "Automation conversation",
       },
     });
+    const body = step.config.body?.trim() || step.config.message?.trim();
+    if (body) {
+      await prisma.message.create({
+        data: {
+          conversationId: conversation.id,
+          body,
+          direction: "INTERNAL",
+        },
+      });
+    }
+    return {
+      status: "COMPLETED",
+      output: { entityType: "Conversation", entityId: conversation.id },
+    };
+  }
+
+  // ── ADD_NOTE / SEND_INTERNAL_NOTIFICATION ──────────────────────────────────
+  if (step.type === "ADD_NOTE" || step.type === "SEND_INTERNAL_NOTIFICATION") {
+    const body = step.config.note?.trim() || step.config.message?.trim();
+    if (!body) return { status: "SKIPPED", error: "Missing note/message." };
+    const conversation = await prisma.conversation.create({
+      data: {
+        agencyId: ctx.agencyId,
+        subAccountId: ctx.subAccountId,
+        contactId: ctx.contactId,
+        channel: "INTERNAL_NOTE",
+        subject: step.type === "ADD_NOTE" ? "Automation note" : "Automation notification",
+        messages: {
+          create: {
+            body,
+            direction: "INTERNAL",
+          },
+        },
+      },
+    });
     return {
       status: "COMPLETED",
       output: { entityType: "Conversation", entityId: conversation.id },
@@ -259,17 +372,70 @@ export async function executeStep(step: StepNode, ctx: StepContext): Promise<Ste
     };
   }
 
+  // ── UPDATE_OPPORTUNITY ─────────────────────────────────────────────────────
+  if (step.type === "UPDATE_OPPORTUNITY") {
+    const statusMap = new Set(["OPEN", "WON", "LOST"]);
+    const status = (step.config.status ?? "").toUpperCase();
+    if (!statusMap.has(status)) return { status: "SKIPPED", error: "Invalid opportunity status." };
+    const opportunity = await prisma.opportunity.findFirst({
+      where: {
+        agencyId: ctx.agencyId,
+        subAccountId: ctx.subAccountId,
+        contactId: ctx.contactId,
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (!opportunity) return { status: "SKIPPED", error: "No opportunity found for contact." };
+    await prisma.opportunity.update({
+      where: { id: opportunity.id },
+      data: { status: status as "OPEN" | "WON" | "LOST" },
+    });
+    return { status: "COMPLETED", output: { opportunityId: opportunity.id, status } };
+  }
+
+  // ── UPDATE_APPOINTMENT_STATUS ──────────────────────────────────────────────
+  if (step.type === "UPDATE_APPOINTMENT_STATUS") {
+    const status = step.config.status?.trim();
+    if (!status) return { status: "SKIPPED", error: "Missing appointment status." };
+    const appointment = await prisma.appointment.findFirst({
+      where: {
+        contactId: ctx.contactId,
+        calendar: { agencyId: ctx.agencyId, subAccountId: ctx.subAccountId },
+      },
+      orderBy: { startsAt: "desc" },
+    });
+    if (!appointment) return { status: "SKIPPED", error: "No appointment found for contact." };
+    await prisma.appointment.update({ where: { id: appointment.id }, data: { status } });
+    return { status: "COMPLETED", output: { appointmentId: appointment.id, status } };
+  }
+
   // ── ASSIGN_TO_USER ──────────────────────────────────────────────────────────
   if (step.type === "ASSIGN_TO_USER") {
     const userEmail = step.config.userId?.trim(); // field is named userId but accepts email
     if (!userEmail) return { status: "SKIPPED", error: "No user email provided." };
-    const user = await prisma.user.findUnique({ where: { email: userEmail } });
+    const user = await prisma.user.findFirst({
+      where: {
+        email: userEmail,
+        subAccountMemberships: { some: { subAccountId: ctx.subAccountId } },
+      },
+    });
     if (!user) return { status: "SKIPPED", error: `User "${userEmail}" not found.` };
     await prisma.contact.update({
       where: { id: ctx.contactId, agencyId: ctx.agencyId, subAccountId: ctx.subAccountId },
       data: { assignedUserId: user.id },
     });
     return { status: "COMPLETED", output: { assignedUserId: user.id } };
+  }
+
+  // ── DELETE_CONTACT ─────────────────────────────────────────────────────────
+  if (step.type === "DELETE_CONTACT") {
+    if (step.config.confirm !== "DELETE") {
+      return { status: "SKIPPED", error: "Delete contact requires confirm=DELETE." };
+    }
+    await prisma.contact.delete({
+      where: { id: ctx.contactId, agencyId: ctx.agencyId, subAccountId: ctx.subAccountId },
+    });
+    return { status: "COMPLETED", output: { deletedContactId: ctx.contactId } };
   }
 
   return {

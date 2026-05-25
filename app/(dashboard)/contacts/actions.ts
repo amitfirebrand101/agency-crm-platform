@@ -72,6 +72,32 @@ export async function updateContact(formData: FormData) {
   });
 
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "UPDATE", entityType: "Contact", entityId: contact.id });
+  await runAutomationsForEvent({
+    type: "CONTACT_CHANGED",
+    agencyId: user.agencyId,
+    subAccountId: user.subAccountId,
+    contactId: contact.id,
+    payload: {
+      previous: {
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        email: contact.email,
+        phone: contact.phone,
+        companyName: contact.companyName,
+        source: contact.source,
+        status: contact.status,
+      },
+      current: {
+        firstName: input.firstName,
+        lastName: input.lastName || null,
+        email: input.email || null,
+        phone: input.phone || null,
+        companyName: input.companyName || null,
+        source: input.source || null,
+        status: input.status ?? contact.status,
+      },
+    },
+  });
   revalidatePath(`/contacts/${contact.id}`);
   revalidatePath("/contacts");
 }
@@ -92,7 +118,9 @@ export async function assignTagToContact(formData: FormData) {
   const tagId = z.string().uuid().parse(String(formData.get("tagId") ?? ""));
   const { user, contact } = await requireContactAccess(contactId);
 
-  const tag = await prisma.tag.findFirstOrThrow({ where: { id: tagId, agencyId: user.agencyId } });
+  const tag = await prisma.tag.findFirstOrThrow({
+    where: { id: tagId, agencyId: user.agencyId, subAccountId: user.subAccountId },
+  });
   await prisma.contactTag.upsert({
     where: { contactId_tagId: { contactId: contact.id, tagId: tag.id } },
     update: {},
@@ -115,8 +143,18 @@ export async function removeTagFromContact(formData: FormData) {
   const tagId = z.string().uuid().parse(String(formData.get("tagId") ?? ""));
   const { user, contact } = await requireContactAccess(contactId);
 
+  const tag = await prisma.tag.findFirstOrThrow({
+    where: { id: tagId, agencyId: user.agencyId, subAccountId: user.subAccountId },
+  });
   await prisma.contactTag.deleteMany({ where: { contactId: contact.id, tagId } });
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "UPDATE", entityType: "Contact", entityId: contact.id, metadata: { removedTagId: tagId } });
+  await runAutomationsForEvent({
+    type: "CONTACT_TAG_REMOVED",
+    agencyId: user.agencyId,
+    subAccountId: user.subAccountId,
+    contactId: contact.id,
+    payload: { tagName: tag.name },
+  });
   revalidatePath(`/contacts/${contact.id}`);
 }
 

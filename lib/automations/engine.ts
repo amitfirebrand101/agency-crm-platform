@@ -29,6 +29,8 @@ export type TriggerEvent = {
 type RunPassResult = {
   status: "completed" | "failed" | "waiting";
   error?: string;
+  resumeAt?: Date | null;
+  resumeSteps?: StepNode[];
   stepResults: Array<{
     stepId: string;
     stepName: string;
@@ -38,6 +40,19 @@ type RunPassResult = {
     error?: string;
   }>;
 };
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function asDate(value: unknown): Date | null {
+  if (value instanceof Date) return value;
+  if (typeof value !== "string") return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
 
 // ── Event ledger ──────────────────────────────────────────────────────────────
 
@@ -154,10 +169,19 @@ async function runSteps(
         : ((step.falseBranch ?? []) as StepNode[]);
 
       if (branch.length > 0) {
-        const branchResult = await runSteps(branch, 0, stepCtx, runId, enrollmentId, automationId);
+        const branchPath = [...branch, ...steps.slice(i + 1)];
+        const branchResult = await runSteps(branchPath, 0, stepCtx, runId, enrollmentId, automationId);
         stepResults.push(...branchResult.stepResults);
         if (branchResult.status === "failed") return { status: "failed", error: branchResult.error, stepResults };
-        // WAIT inside a branch is not supported — we skip it gracefully
+        if (branchResult.status === "waiting") {
+          return {
+            status: "waiting",
+            resumeAt: branchResult.resumeAt ?? null,
+            resumeSteps: branchResult.resumeSteps ?? [],
+            stepResults,
+          };
+        }
+        return { status: "completed", stepResults };
       }
       continue;
     }
@@ -173,9 +197,18 @@ async function runSteps(
     // Propagate new contactId if step created one
     if (result.contactId) mutableContactId = result.contactId;
 
+    const output =
+      result.status === "WAITING"
+        ? {
+            ...(result.output ?? {}),
+            resumeAt: result.resumeAt?.toISOString() ?? null,
+            resumeSteps: steps.slice(i + 1),
+          }
+        : result.output;
+
     await recordStepRun(runId, enrollmentId, automationId, ctx.agencyId, ctx.subAccountId, step, {
       status: result.status,
-      output: result.output,
+      output,
       error: result.error,
     });
 
@@ -184,13 +217,15 @@ async function runSteps(
       stepName: step.name,
       stepType: step.type,
       status: result.status,
-      output: result.output,
+      output,
       error: result.error,
     });
 
     if (result.status === "WAITING" || result.status === "WAITING_TEST") {
       return {
         status: result.status === "WAITING_TEST" ? "completed" : "waiting",
+        resumeAt: result.resumeAt ?? null,
+        resumeSteps: steps.slice(i + 1),
         stepResults,
         error: undefined,
       };
@@ -393,6 +428,7 @@ export async function enrollAndRun(input: {
     automationId: input.automationId,
     agencyId: input.agencyId,
     subAccountId: input.subAccountId,
+    runId,
     contactId: input.contactId,
     payload: input.payload,
     isTestRun: input.isTestRun,
@@ -403,9 +439,12 @@ export async function enrollAndRun(input: {
   // Finalize run
   if (runId !== "no-run") {
     if (result.status === "waiting") {
-      // Find the WAIT step result to get resumeAt
       const waitResult = result.stepResults.find((r) => r.status === "WAITING");
-      const resumeAt = waitResult?.output?.resumeAt as Date | undefined;
+      const resumeAt = result.resumeAt ?? asDate(waitResult?.output?.resumeAt);
+      const waitingContext = {
+        ...(input.payload ?? {}),
+        __automationResumeSteps: result.resumeSteps ?? [],
+      };
 
       await finalizeRun(runId, "WAITING");
 
@@ -418,6 +457,7 @@ export async function enrollAndRun(input: {
               status: "WAITING",
               currentStepId: waitingStep?.stepId ?? null,
               resumeAt: resumeAt ?? null,
+              context: waitingContext as Prisma.InputJsonValue,
             },
           });
         } catch { /* non-fatal */ }
@@ -492,12 +532,19 @@ export async function resumeEnrollment(
 
   if (!definition) return { resumed: false, error: "Could not load workflow definition." };
 
-  // Find position of current (waiting) step
-  const steps = definition.steps as StepNode[];
-  const waitIdx = enrollment.currentStepId
-    ? steps.findIndex((s) => s.id === enrollment.currentStepId)
-    : -1;
-  const startIdx = waitIdx >= 0 ? waitIdx + 1 : 0;
+  const context = asRecord(enrollment.context);
+  const resumeStepsCandidate = context.__automationResumeSteps;
+  const resumeSteps =
+    Array.isArray(resumeStepsCandidate)
+      ? (resumeStepsCandidate as StepNode[])
+      : null;
+  const steps = resumeSteps ?? (definition.steps as StepNode[]);
+  const startIdx = resumeSteps ? 0 : (() => {
+    const waitIdx = enrollment.currentStepId
+      ? steps.findIndex((s) => s.id === enrollment.currentStepId)
+      : -1;
+    return waitIdx >= 0 ? waitIdx + 1 : 0;
+  })();
 
   if (startIdx >= steps.length) {
     // Nothing left — mark completed
@@ -518,7 +565,8 @@ export async function resumeEnrollment(
     });
   } catch { /* non-fatal */ }
 
-  const context = (enrollment.context ?? {}) as Record<string, unknown>;
+  const payloadContext = { ...context };
+  delete payloadContext.__automationResumeSteps;
 
   let runId: string;
   try {
@@ -530,7 +578,7 @@ export async function resumeEnrollment(
       subAccountId,
       enrollment.contactId,
       "RESUME",
-      context
+      payloadContext
     );
   } catch {
     runId = "no-run";
@@ -540,8 +588,9 @@ export async function resumeEnrollment(
     automationId: enrollment.automationId,
     agencyId,
     subAccountId,
+    runId,
     contactId: enrollment.contactId,
-    payload: context,
+    payload: payloadContext,
   };
 
   const result = await runSteps(steps, startIdx, ctx, runId, enrollmentId, enrollment.automationId);
@@ -550,13 +599,18 @@ export async function resumeEnrollment(
     if (result.status === "waiting") {
       await finalizeRun(runId, "WAITING");
       const waitStep = result.stepResults.find((r) => r.status === "WAITING");
+      const nextContext = {
+        ...payloadContext,
+        __automationResumeSteps: result.resumeSteps ?? [],
+      };
       try {
         await prisma.automationEnrollment.update({
           where: { id: enrollmentId },
           data: {
             status: "WAITING",
             currentStepId: waitStep?.stepId ?? null,
-            resumeAt: (waitStep?.output?.resumeAt as Date | undefined) ?? null,
+            resumeAt: result.resumeAt ?? asDate(waitStep?.output?.resumeAt),
+            context: nextContext as Prisma.InputJsonValue,
           },
         });
       } catch { /* non-fatal */ }

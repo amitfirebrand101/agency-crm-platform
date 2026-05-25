@@ -16,6 +16,7 @@ export const ALL_TRIGGER_TYPES = [
   "APPOINTMENT_STATUS",
   "OPPORTUNITY_CREATED",
   "OPPORTUNITY_STATUS",
+  "PIPELINE_STAGE_CHANGED",
   "INBOUND_WEBHOOK",
   "FORM_SUBMITTED",
   "CUSTOMER_REPLIED",
@@ -30,6 +31,7 @@ export const EXECUTABLE_TRIGGER_TYPES = new Set<string>([
   "APPOINTMENT_STATUS",
   "OPPORTUNITY_CREATED",
   "OPPORTUNITY_STATUS",
+  "PIPELINE_STAGE_CHANGED",
   "INBOUND_WEBHOOK",
 ]);
 
@@ -38,13 +40,20 @@ export const ALL_STEP_TYPES = [
   "UPDATE_CONTACT_FIELD",
   "ADD_CONTACT_TAG",
   "REMOVE_CONTACT_TAG",
+  "REMOVE_ASSIGNED_USER",
+  "SET_DND",
+  "ADD_NOTE",
+  "DELETE_CONTACT",
   "CREATE_CONVERSATION",
   "CREATE_OPPORTUNITY",
+  "UPDATE_OPPORTUNITY",
+  "UPDATE_APPOINTMENT_STATUS",
   "WAIT",
   "IF_ELSE",
   "OUTBOUND_WEBHOOK",
   "SEND_SMS",
   "SEND_EMAIL",
+  "SEND_INTERNAL_NOTIFICATION",
   "ASSIGN_TO_USER",
   "REMOVE_FROM_WORKFLOW",
 ] as const;
@@ -171,6 +180,21 @@ function validateStepNode(raw: unknown, path: string): string[] {
   if (s.type === "OUTBOUND_WEBHOOK") {
     const cr = outboundWebhookConfigSchema.safeParse(s.config);
     if (!cr.success) errs.push(`${path} (OUTBOUND_WEBHOOK): ${cr.error.issues[0]?.message}`);
+  }
+  if (s.type === "ADD_NOTE" || s.type === "SEND_INTERNAL_NOTIFICATION") {
+    const body = s.config.note ?? s.config.message;
+    if (!body?.trim()) errs.push(`${path}: message is required`);
+  }
+  if (s.type === "DELETE_CONTACT" && s.config.confirm !== "DELETE") {
+    errs.push(`${path}: confirm must be DELETE`);
+  }
+  if (s.type === "SET_DND") {
+    if (!["email", "sms", "both"].includes(s.config.channel ?? "")) {
+      errs.push(`${path}: channel must be email, sms, or both`);
+    }
+    if (!["true", "false"].includes(s.config.enabled ?? "")) {
+      errs.push(`${path}: enabled must be true or false`);
+    }
   }
   if (s.type === "ADD_CONTACT_TAG" || s.type === "REMOVE_CONTACT_TAG") {
     if (!s.config.tagName?.trim()) errs.push(`${path}: tagName is required`);

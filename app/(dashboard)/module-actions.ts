@@ -6,6 +6,7 @@ import { canWriteSubAccount, requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { auditLog } from "@/lib/security";
 import { appointmentSchema } from "@/lib/validation";
+import { runAutomationsForEvent } from "@/lib/automations/executor";
 
 async function requireWritableSubAccount() {
   const user = await requireUser();
@@ -62,6 +63,18 @@ export async function createAppointment(formData: FormData) {
   });
 
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "Appointment", entityId: appointment.id });
+  await runAutomationsForEvent({
+    type: "APPOINTMENT_STATUS",
+    agencyId: user.agencyId,
+    subAccountId: user.subAccountId,
+    contactId: appointment.contactId,
+    payload: {
+      appointmentId: appointment.id,
+      calendarId: calendar.id,
+      status: appointment.status,
+      title: appointment.title,
+    },
+  });
   revalidatePath(`/calendars/${calendar.id}`);
   revalidatePath("/calendars");
 }
@@ -80,6 +93,18 @@ export async function updateAppointmentStatus(formData: FormData) {
 
   await prisma.appointment.update({ where: { id: appointmentId }, data: { status } });
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "UPDATE", entityType: "Appointment", entityId: appointmentId });
+  await runAutomationsForEvent({
+    type: "APPOINTMENT_STATUS",
+    agencyId: user.agencyId,
+    subAccountId: user.subAccountId,
+    contactId: appointment.contactId,
+    payload: {
+      appointmentId,
+      calendarId: appointment.calendarId,
+      status,
+      previousStatus: appointment.status,
+    },
+  });
   revalidatePath(`/calendars/${appointment.calendarId}`);
 }
 
@@ -117,6 +142,18 @@ export async function createOpportunity(formData: FormData) {
     }
   });
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "Opportunity", entityId: opportunity.id });
+  await runAutomationsForEvent({
+    type: "OPPORTUNITY_CREATED",
+    agencyId: user.agencyId,
+    subAccountId: user.subAccountId,
+    contactId: opportunity.contactId,
+    payload: {
+      opportunityId: opportunity.id,
+      stageId: opportunity.stageId,
+      status: opportunity.status,
+      valueCents: opportunity.valueCents,
+    },
+  });
   revalidatePath("/opportunities");
 }
 
@@ -131,6 +168,18 @@ export async function moveOpportunityToStage(formData: FormData) {
 
   await prisma.opportunity.update({ where: { id: opp.id }, data: { stageId } });
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "UPDATE", entityType: "Opportunity", entityId: opp.id, metadata: { stageId } });
+  await runAutomationsForEvent({
+    type: "PIPELINE_STAGE_CHANGED",
+    agencyId: user.agencyId,
+    subAccountId: user.subAccountId,
+    contactId: opp.contactId,
+    payload: {
+      opportunityId: opp.id,
+      previousStageId: opp.stageId,
+      stageId,
+      status: opp.status,
+    },
+  });
   revalidatePath("/opportunities");
 }
 
@@ -145,6 +194,18 @@ export async function updateOpportunityStatus(formData: FormData) {
 
   await prisma.opportunity.update({ where: { id: opp.id }, data: { status } });
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "UPDATE", entityType: "Opportunity", entityId: opp.id, metadata: { status } });
+  await runAutomationsForEvent({
+    type: "OPPORTUNITY_STATUS",
+    agencyId: user.agencyId,
+    subAccountId: user.subAccountId,
+    contactId: opp.contactId,
+    payload: {
+      opportunityId: opp.id,
+      previousStatus: opp.status,
+      status,
+      stageId: opp.stageId,
+    },
+  });
   revalidatePath("/opportunities");
 }
 

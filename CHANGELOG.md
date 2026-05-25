@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.3.1 - 2026-05-25
+
+### Automations
+- Fixed IF/ELSE execution so the selected branch becomes the actual execution path, including steps that follow the branch.
+- Fixed WAIT persistence by storing `resumeAt` and a durable resume cursor for the remaining steps.
+- Added support for WAIT steps inside IF/ELSE paths.
+- Added executable `CONTACT_TAG_REMOVED` and `PIPELINE_STAGE_CHANGED` triggers.
+- Wired contact update, tag removal, appointment status, opportunity created, opportunity status, and pipeline stage events into the automation dispatcher.
+- Added/finished internal executable actions for remove assigned user, DND opt-in/out flags, add note, internal notification, update opportunity, update appointment status, and guarded delete contact.
+- Hardened assignment so workflow user assignment only targets users who belong to the current sub-account.
+- Added outbound webhook delivery persistence in `AutomationWebhookDelivery`.
+- Disabled non-executable catalog items in the builder picker so unsupported actions cannot be added as if they work.
+
+### Verification
+- `npx tsc --noEmit` passes.
+- `npm run lint` passes with existing unrelated warnings.
+- `npm run build` passes.
+
 ## 0.3.0 - 2026-05-24
 
 Major feature expansion and production hardening across all CRM modules.
