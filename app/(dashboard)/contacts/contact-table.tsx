@@ -20,6 +20,7 @@ type ContactRow = {
   phone: string | null;
   companyName: string | null;
   status: string;
+  score: number;
   createdAt: string;
   tags: Array<{ tag: { id: string; name: string; color: string } }>;
   lastActivity: string;
@@ -268,6 +269,7 @@ export function ContactTable({
               <th className="px-4 py-3 font-semibold">Contact</th>
               <th className="px-4 py-3 font-semibold">Email</th>
               <th className="px-4 py-3 font-semibold">Phone</th>
+              <th className="px-4 py-3 font-semibold">Score</th>
               <th className="px-4 py-3 font-semibold">Tags</th>
               <th className="px-4 py-3 font-semibold">Status</th>
               <th className="px-4 py-3 font-semibold">Last Activity</th>
@@ -346,6 +348,20 @@ export function ContactTable({
                         {contact.phone}
                       </a>
                     ) : <span className="text-muted">—</span>}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-block min-w-[2.5rem] rounded-full px-2 py-0.5 text-center text-xs font-bold ${
+                        contact.score >= 70
+                          ? "bg-green-100 text-green-700"
+                          : contact.score >= 40
+                          ? "bg-amber-100 text-amber-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                      title={`Score: ${contact.score}`}
+                    >
+                      {contact.score}
+                    </span>
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1">

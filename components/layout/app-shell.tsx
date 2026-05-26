@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Activity, Moon } from "lucide-react";
 import { signOut } from "@/app/(dashboard)/actions";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
+import { NotificationBell } from "@/app/(dashboard)/notification-bell";
 import type { SessionUser } from "@/lib/auth";
 
 const appName = process.env.NEXT_PUBLIC_APP_NAME?.replace(/^["']|["']$/g, "") ?? "GoLowLevel";
@@ -38,6 +39,7 @@ export function AppShell({ user, children }: AppShellProps) {
               <h1 className="text-lg font-semibold">{user.subAccountName ?? "Agency setup"}</h1>
             </div>
             <div className="flex items-center gap-2">
+              <NotificationBell />
               <button
                 aria-label="Theme"
                 className="flex size-9 items-center justify-center rounded-md border border-border bg-background text-muted"

@@ -102,18 +102,20 @@ enum AutomationWebhookDeliveryStatus {
 }
 
 model User {
-  id                    String                 @id @db.Uuid
-  name                  String?
-  email                 String                 @unique
-  imageUrl              String?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
-  agencyMemberships     AgencyMembership[]
-  subAccountMemberships SubAccountMembership[]
-  assignedContacts      Contact[]              @relation("AssignedContacts")
-  assignedTasks         ContactTask[]          @relation("AssignedTasks")
-  auditLogs             AuditLog[]
-  sentInvites           UserInvite[]           @relation("SentInvites")
+  id                       String                 @id @db.Uuid
+  name                     String?
+  email                    String                 @unique
+  imageUrl                 String?
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
+  agencyMemberships        AgencyMembership[]
+  subAccountMemberships    SubAccountMembership[]
+  assignedContacts         Contact[]              @relation("AssignedContacts")
+  assignedTasks            ContactTask[]          @relation("AssignedTasks")
+  assignedConversations    Conversation[]         @relation("AssignedConversations")
+  auditLogs                AuditLog[]
+  sentInvites              UserInvite[]           @relation("SentInvites")
+  notifications            Notification[]
 }
 
 model Agency {
@@ -152,35 +154,38 @@ model AgencyMembership {
 }
 
 model SubAccount {
-  id            String                 @id @default(uuid()) @db.Uuid
-  agencyId      String                 @db.Uuid
-  name          String
-  slug          String
-  timezone      String                 @default("America/New_York")
-  addressLine1  String?
-  city          String?
-  region        String?
-  country       String?                @default("US")
-  postalCode    String?
-  createdAt     DateTime               @default(now())
-  updatedAt     DateTime               @updatedAt
-  agency        Agency                 @relation(fields: [agencyId], references: [id], onDelete: Cascade)
-  members       SubAccountMembership[]
-  contacts      Contact[]
-  tags          Tag[]
-  customFields  CustomField[]
-  pipelines     Pipeline[]
-  conversations Conversation[]
-  calendars     Calendar[]
-  automations   Automation[]
-  sites         Site[]
-  sitePages     SitePage[]
-  funnels       Funnel[]
-  siteForms     SiteForm[]
-  surveys       Survey[]
-  blogPosts     BlogPost[]
-  campaigns     MarketingCampaign[]
-  phoneNumbers  PhoneNumber[]
+  id               String                 @id @default(uuid()) @db.Uuid
+  agencyId         String                 @db.Uuid
+  name             String
+  slug             String
+  timezone         String                 @default("America/New_York")
+  addressLine1     String?
+  city             String?
+  region           String?
+  country          String?                @default("US")
+  postalCode       String?
+  assignmentCursor Int                    @default(0)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  agency           Agency                 @relation(fields: [agencyId], references: [id], onDelete: Cascade)
+  members          SubAccountMembership[]
+  contacts         Contact[]
+  tags             Tag[]
+  customFields     CustomField[]
+  pipelines        Pipeline[]
+  conversations    Conversation[]
+  calendars        Calendar[]
+  automations      Automation[]
+  sites            Site[]
+  sitePages        SitePage[]
+  funnels          Funnel[]
+  siteForms        SiteForm[]
+  surveys          Survey[]
+  blogPosts        BlogPost[]
+  campaigns        MarketingCampaign[]
+  phoneNumbers     PhoneNumber[]
+  smartLists       SmartList[]
+  cannedResponses  CannedResponse[]
 
   @@unique([agencyId, slug])
   @@index([agencyId])
@@ -211,6 +216,7 @@ model Contact {
   phone          String?
   companyName    String?
   status         ContactStatus      @default(LEAD)
+  score          Int                @default(0)
   source         String?
   timezone       String?
   addressLine1   String?
@@ -362,20 +368,27 @@ model Opportunity {
 }
 
 model Conversation {
-  id           String              @id @default(uuid()) @db.Uuid
-  agencyId     String              @db.Uuid
-  subAccountId String              @db.Uuid
-  contactId    String?             @db.Uuid
-  channel      ConversationChannel
-  status       ConversationStatus  @default(OPEN)
-  subject      String?
-  createdAt    DateTime            @default(now())
-  updatedAt    DateTime            @updatedAt
-  subAccount   SubAccount          @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
-  contact      Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  messages     Message[]
+  id             String              @id @default(uuid()) @db.Uuid
+  agencyId       String              @db.Uuid
+  subAccountId   String              @db.Uuid
+  contactId      String?             @db.Uuid
+  assignedUserId String?             @db.Uuid
+  channel        ConversationChannel
+  status         ConversationStatus  @default(OPEN)
+  priority       String              @default("normal")
+  unread         Boolean             @default(true)
+  labels         String[]            @default([])
+  subject        String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  subAccount     SubAccount          @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  contact        Contact?            @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  assignedUser   User?               @relation("AssignedConversations", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  messages       Message[]
 
   @@index([agencyId, subAccountId, status])
+  @@index([subAccountId, assignedUserId])
+  @@index([subAccountId, unread])
 }
 
 model Message {
@@ -412,11 +425,14 @@ model Calendar {
   reminderEmailHours       Int                    @default(24)
   reminderSmsEnabled       Boolean                @default(false)
   reminderSmsHours         Int                    @default(24)
+  logoUrl                  String?
+  primaryColor             String                 @default("#0e7490")
   createdAt                DateTime               @default(now())
   updatedAt                DateTime               @updatedAt
   subAccount               SubAccount             @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
   appointments             Appointment[]
   availability             CalendarAvailability[]
+  questions                CalendarQuestion[]
 
   @@index([agencyId, subAccountId])
 }
@@ -449,6 +465,7 @@ model Appointment {
   cancelToken     String?  @unique
   rescheduleToken String?  @unique
   reminderSent    Boolean  @default(false)
+  customAnswers   Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   calendar        Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
@@ -891,4 +908,64 @@ model LoginAttempt {
 
   @@index([ipAddress, createdAt])
   @@index([email, createdAt])
+}
+
+// Saved contact filter segments (Smart Lists)
+model SmartList {
+  id           String     @id @default(uuid()) @db.Uuid
+  agencyId     String     @db.Uuid
+  subAccountId String     @db.Uuid
+  name         String
+  filters      Json       @default("{}")
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId, subAccountId])
+}
+
+// Saved message templates for quick replies in conversations
+model CannedResponse {
+  id           String     @id @default(uuid()) @db.Uuid
+  agencyId     String     @db.Uuid
+  subAccountId String     @db.Uuid
+  name         String
+  body         String     @db.Text
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  subAccount   SubAccount @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId, subAccountId])
+}
+
+// Custom questions added to a booking form
+model CalendarQuestion {
+  id         String   @id @default(uuid()) @db.Uuid
+  calendarId String   @db.Uuid
+  label      String
+  type       String   @default("text")
+  options    String[] @default([])
+  required   Boolean  @default(false)
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  calendar   Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+
+  @@index([calendarId])
+}
+
+// In-app notification bell entries
+model Notification {
+  id        String   @id @default(uuid()) @db.Uuid
+  agencyId  String   @db.Uuid
+  userId    String   @db.Uuid
+  title     String
+  body      String
+  read      Boolean  @default(false)
+  link      String?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read])
+  @@index([agencyId])
 }

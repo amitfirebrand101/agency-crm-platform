@@ -4,6 +4,14 @@ import { useEffect, useState } from "react";
 import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, Video } from "lucide-react";
 import { TimezoneDisplay } from "./timezone-display";
 
+type CalendarQuestion = {
+  id: string;
+  label: string;
+  type: string;
+  required: boolean;
+  options: string[];
+};
+
 type CalendarInfo = {
   id: string;
   name: string;
@@ -12,6 +20,9 @@ type CalendarInfo = {
   slotDuration: number;
   location: string | null;
   conferenceUrl: string | null;
+  logoUrl: string | null;
+  primaryColor: string | null;
+  questions: CalendarQuestion[];
 };
 
 type Slot = { start: string; end: string; label: string };
@@ -37,6 +48,7 @@ export default function BookingPage({ params }: { params: Promise<{ calendarId: 
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [step, setStep] = useState<"calendar" | "slots" | "form" | "confirmed">("calendar");
   const [form, setForm] = useState({ firstName: "", lastName: "", email: "", phone: "", notes: "" });
+  const [customAnswers, setCustomAnswers] = useState<Record<string, string | boolean>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [bookedAt, setBookedAt] = useState<string | null>(null);
@@ -89,6 +101,7 @@ export default function BookingPage({ params }: { params: Promise<{ calendarId: 
           ...form,
           startsAt: selectedSlot.start,
           endsAt: selectedSlot.end,
+          ...(Object.keys(customAnswers).length > 0 ? { customAnswers } : {}),
         }),
       });
       const data = await r.json();
@@ -125,6 +138,8 @@ export default function BookingPage({ params }: { params: Promise<{ calendarId: 
       })
     : "";
 
+  const brandColor = calendarInfo?.primaryColor ?? "#2563eb";
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="mx-auto max-w-2xl px-4 py-12">
@@ -132,6 +147,14 @@ export default function BookingPage({ params }: { params: Promise<{ calendarId: 
         <div className="mb-8 text-center">
           {calendarInfo ? (
             <>
+              {calendarInfo.logoUrl && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={calendarInfo.logoUrl}
+                  alt="Logo"
+                  className="mx-auto mb-4 max-h-16 object-contain"
+                />
+              )}
               <h1 className="text-3xl font-bold text-gray-900">{calendarInfo.name}</h1>
               {calendarInfo.description && (
                 <p className="mt-2 text-gray-600">{calendarInfo.description}</p>
@@ -203,9 +226,10 @@ export default function BookingPage({ params }: { params: Promise<{ calendarId: 
                     className={[
                       "aspect-square w-full rounded-lg text-sm font-medium transition",
                       isPast ? "cursor-not-allowed text-gray-300" :
-                      ds === selectedDate ? "bg-blue-600 text-white" :
-                      "hover:bg-blue-50 text-gray-900",
+                      ds === selectedDate ? "text-white" :
+                      "text-gray-900 hover:bg-gray-100",
                     ].join(" ")}
+                    style={!isPast && ds === selectedDate ? { backgroundColor: brandColor } : undefined}
                   >
                     {d}
                   </button>
@@ -332,6 +356,61 @@ export default function BookingPage({ params }: { params: Promise<{ calendarId: 
                   />
                 </label>
 
+                {/* Custom questions */}
+                {calendarInfo?.questions && calendarInfo.questions.length > 0 && (
+                  <div className="space-y-3 border-t border-gray-200 pt-3">
+                    {calendarInfo.questions.map((q) => (
+                      <label key={q.id} className="block">
+                        <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+                          {q.label}
+                          {q.required && <span className="ml-0.5 text-red-500">*</span>}
+                        </span>
+                        {q.type === "textarea" ? (
+                          <textarea
+                            required={q.required}
+                            rows={3}
+                            value={(customAnswers[q.id] as string) ?? ""}
+                            onChange={(e) => setCustomAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+                            className="w-full resize-none rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                          />
+                        ) : q.type === "select" ? (
+                          <select
+                            required={q.required}
+                            value={(customAnswers[q.id] as string) ?? ""}
+                            onChange={(e) => setCustomAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                          >
+                            <option value="">Select…</option>
+                            {q.options.map((opt) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        ) : q.type === "checkbox" ? (
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id={`q-${q.id}`}
+                              required={q.required}
+                              checked={(customAnswers[q.id] as boolean) ?? false}
+                              onChange={(e) => setCustomAnswers((a) => ({ ...a, [q.id]: e.target.checked }))}
+                              className="h-4 w-4 rounded border-gray-300 text-blue-600"
+                            />
+                            <span className="text-sm text-gray-700">{q.label}</span>
+                          </div>
+                        ) : (
+                          <input
+                            type={q.type === "email" ? "email" : q.type === "phone" ? "tel" : "text"}
+                            required={q.required}
+                            value={(customAnswers[q.id] as string) ?? ""}
+                            onChange={(e) => setCustomAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+                            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
+                          />
+                        )}
+                      </label>
+                    ))}
+                  </div>
+                )}
+
                 {error && (
                   <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
                     {error}
@@ -341,7 +420,8 @@ export default function BookingPage({ params }: { params: Promise<{ calendarId: 
                 <button
                   onClick={handleBook}
                   disabled={submitting || !form.firstName || !form.email}
-                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-700 transition disabled:opacity-50"
+                  className="flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-sm font-semibold text-white transition disabled:opacity-50"
+                  style={{ backgroundColor: brandColor }}
                 >
                   {submitting && <Loader2 className="animate-spin" size={15} />}
                   {submitting ? "Confirming…" : "Confirm Appointment"}

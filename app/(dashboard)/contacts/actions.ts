@@ -99,6 +99,26 @@ export async function createContact(
     }
   }
 
+  // Round-robin auto-assignment: assign to next team member if no explicit assignee
+  let autoAssignedUserId: string | null = null;
+  const members = await prisma.subAccountMembership.findMany({
+    where: { subAccountId: user.subAccountId },
+    orderBy: { userId: "asc" },
+    select: { userId: true },
+  });
+  if (members.length > 0) {
+    const subAccount = await prisma.subAccount.findUnique({
+      where: { id: user.subAccountId },
+      select: { assignmentCursor: true },
+    });
+    const cursor = subAccount?.assignmentCursor ?? 0;
+    autoAssignedUserId = members[cursor % members.length].userId;
+    await prisma.subAccount.update({
+      where: { id: user.subAccountId },
+      data: { assignmentCursor: { increment: 1 } },
+    });
+  }
+
   const contact = await prisma.contact.create({
     data: {
       agencyId: user.agencyId,
@@ -109,6 +129,7 @@ export async function createContact(
       phone: input.phone || null,
       companyName: input.companyName || null,
       source: input.source || null,
+      assignedUserId: autoAssignedUserId,
     },
   });
 
@@ -153,6 +174,9 @@ export async function updateContact(formData: FormData) {
     resolvedAssignedUserId = membership ? ext.assignedUserId : contact.assignedUserId;
   }
 
+  const rawScore = formData.get("score");
+  const score = rawScore !== null && rawScore !== "" ? Math.min(100, Math.max(0, parseInt(String(rawScore), 10) || 0)) : undefined;
+
   await prisma.contact.update({
     where: { id: contact.id, agencyId: user.agencyId, subAccountId: user.subAccountId },
     data: {
@@ -166,6 +190,7 @@ export async function updateContact(formData: FormData) {
       emailOptOut: ext.emailOptOut,
       smsOptOut: ext.smsOptOut,
       assignedUserId: resolvedAssignedUserId,
+      ...(score !== undefined ? { score } : {}),
     }
   });
 
@@ -467,6 +492,10 @@ export async function startSmsConversation(formData: FormData) {
   const raw = Object.fromEntries(formData);
   const input = startSmsSchema.parse(raw);
   const { user, contact } = await requireContactAccess(input.contactId);
+
+  if (contact.smsOptOut) {
+    throw new Error("This contact has opted out of SMS messages.");
+  }
 
   const existing = await prisma.conversation.findFirst({
     where: {

@@ -11,6 +11,10 @@ import { prisma } from "@/lib/prisma";
 import { ContactTable } from "./contact-table";
 import { Pagination } from "./pagination";
 import { CreateContactForm } from "./create-contact-form";
+import { LifecycleBar } from "./lifecycle-bar";
+import { SmartListSidebar } from "./smart-list-sidebar";
+import { listSmartLists } from "./smart-list-actions";
+import type { SmartListFilters } from "./smart-list-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -38,12 +42,16 @@ const PAGE_SIZE = 50;
 export default async function ContactsPage({
   searchParams
 }: {
-  searchParams?: Promise<{ q?: string; status?: string; page?: string }>;
+  searchParams?: Promise<{ q?: string; status?: string; page?: string; segment?: string; scoreMin?: string; scoreMax?: string; source?: string }>;
 }) {
   const params = await searchParams;
   const query = params?.q?.trim() ?? "";
   const statusFilter = params?.status ?? "";
   const page = Math.max(1, parseInt(params?.page ?? "1", 10) || 1);
+  const activeSegmentId = params?.segment ?? "";
+  const scoreMin = params?.scoreMin ? parseInt(params.scoreMin, 10) : undefined;
+  const scoreMax = params?.scoreMax ? parseInt(params.scoreMax, 10) : undefined;
+  const sourceFilter = params?.source ?? "";
 
   const user = await requireUser();
   let databaseUnavailable = false;
@@ -54,6 +62,15 @@ export default async function ContactsPage({
   let filteredCount = 0;
   let leadsCount = 0;
   let customersCount = 0;
+  let inactiveCount = 0;
+  let smartLists: Awaited<ReturnType<typeof listSmartLists>>["lists"] = [];
+
+  const currentFilters: SmartListFilters = {
+    ...(statusFilter ? { status: statusFilter as SmartListFilters["status"] } : {}),
+    ...(sourceFilter ? { source: sourceFilter } : {}),
+    ...(scoreMin !== undefined ? { scoreMin } : {}),
+    ...(scoreMax !== undefined ? { scoreMax } : {}),
+  };
 
   try {
     const baseWhere: Prisma.ContactWhereInput = {
@@ -64,6 +81,10 @@ export default async function ContactsPage({
     const where: Prisma.ContactWhereInput = {
       ...baseWhere,
       ...(statusFilter ? { status: statusFilter as Prisma.EnumContactStatusFilter } : {}),
+      ...(sourceFilter ? { source: { contains: sourceFilter, mode: "insensitive" } } : {}),
+      ...(scoreMin !== undefined || scoreMax !== undefined
+        ? { score: { ...(scoreMin !== undefined ? { gte: scoreMin } : {}), ...(scoreMax !== undefined ? { lte: scoreMax } : {}) } }
+        : {}),
       ...(query
         ? {
             OR: [
@@ -79,7 +100,10 @@ export default async function ContactsPage({
 
     const skip = (page - 1) * PAGE_SIZE;
 
-    [contacts, tags, customFields, totalContacts, filteredCount, leadsCount, customersCount] = await Promise.all([
+    const [
+      fetchedContacts, fetchedTags, fetchedCustomFields,
+      total, filtered, leads, customers, inactive, smartListResult
+    ] = await Promise.all([
       prisma.contact.findMany({
         where,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -103,8 +127,20 @@ export default async function ContactsPage({
       prisma.contact.count({ where: baseWhere }),
       prisma.contact.count({ where }),
       prisma.contact.count({ where: { ...baseWhere, status: "LEAD" } }),
-      prisma.contact.count({ where: { ...baseWhere, status: "CUSTOMER" } })
+      prisma.contact.count({ where: { ...baseWhere, status: "CUSTOMER" } }),
+      prisma.contact.count({ where: { ...baseWhere, status: "INACTIVE" } }),
+      listSmartLists(),
     ]);
+
+    contacts = fetchedContacts;
+    tags = fetchedTags;
+    customFields = fetchedCustomFields;
+    totalContacts = total;
+    filteredCount = filtered;
+    leadsCount = leads;
+    customersCount = customers;
+    inactiveCount = inactive;
+    smartLists = smartListResult.lists;
   } catch (error) {
     databaseUnavailable = true;
     console.error("Contacts page database query failed", error);
@@ -134,6 +170,14 @@ export default async function ContactsPage({
       </div>
 
       {databaseUnavailable ? <DbWarning /> : null}
+
+      {/* Lifecycle bar */}
+      <LifecycleBar
+        leadCount={leadsCount}
+        customerCount={customersCount}
+        inactiveCount={inactiveCount}
+        activeStatus={statusFilter}
+      />
 
       {/* Stats bar */}
       <div className="grid grid-cols-3 gap-4">
@@ -234,6 +278,7 @@ export default async function ContactsPage({
                         phone: c.phone,
                         companyName: c.companyName,
                         status: c.status,
+                        score: c.score,
                         createdAt: c.createdAt.toISOString(),
                         tags: c.tags.map((ct) => ({ tag: ct.tag })),
                         lastActivity: relTime(lastActivityDate),
@@ -267,6 +312,11 @@ export default async function ContactsPage({
 
         {/* Right panel */}
         <div className="space-y-4">
+          <SmartListSidebar
+            lists={smartLists}
+            currentFilters={currentFilters}
+            activeSegmentId={activeSegmentId}
+          />
           <CreateContactForm />
 
           <Card>

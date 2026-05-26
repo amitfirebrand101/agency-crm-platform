@@ -55,6 +55,7 @@ const bookingSchema = z.object({
   notes: z.string().trim().max(2000).optional(),
   startsAt: z.string().datetime(),
   endsAt: z.string().datetime(),
+  customAnswers: z.record(z.string(), z.union([z.string(), z.boolean(), z.number()])).optional(),
 });
 
 export async function POST(req: NextRequest, ctx: Ctx) {
@@ -141,6 +142,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       endsAt,
       status: "scheduled",
       notes: input.notes ?? null,
+      customAnswers: input.customAnswers ?? undefined,
       contactEmail: input.email,
       contactPhone: input.phone ?? null,
       confirmToken,

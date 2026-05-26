@@ -16,6 +16,12 @@ export async function GET(_req: NextRequest, ctx: Ctx) {
       slotDuration: true,
       location: true,
       conferenceUrl: true,
+      logoUrl: true,
+      primaryColor: true,
+      questions: {
+        orderBy: { order: "asc" },
+        select: { id: true, label: true, type: true, required: true, options: true },
+      },
     },
   });
   if (!calendar) return NextResponse.json({ error: "Not found" }, { status: 404 });

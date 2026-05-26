@@ -33,6 +33,7 @@ import {
   uncompleteContactTask,
   updateContact,
 } from "@/app/(dashboard)/contacts/actions";
+import { MergeDialog } from "./merge-dialog";
 import { Badge, statusVariant } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
@@ -413,8 +414,20 @@ export default async function ContactDetailPage({ params }: Props) {
                     </span>
                   </div>
                 ) : null}
-                <div className="mt-1">
+                <div className="mt-1 flex items-center gap-2">
                   <Badge variant={statusVariant(contact.status)}>{contact.status}</Badge>
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${
+                      contact.score >= 70
+                        ? "bg-green-100 text-green-700"
+                        : contact.score >= 40
+                        ? "bg-amber-100 text-amber-700"
+                        : "bg-red-100 text-red-700"
+                    }`}
+                    title="Contact score"
+                  >
+                    Score: {contact.score}
+                  </span>
                 </div>
               </div>
             </div>
@@ -454,6 +467,7 @@ export default async function ContactDetailPage({ params }: Props) {
                   </SubmitButton>
                 </form>
               ) : null}
+              <MergeDialog primaryId={contact.id} primaryName={fullName} />
             </div>
           </div>
         </CardBody>
