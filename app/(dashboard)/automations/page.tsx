@@ -14,9 +14,21 @@ import { triggerCatalog } from "@/lib/automations/catalog";
 type AutomationRow = Prisma.AutomationGetPayload<{
   include: {
     runs: { orderBy: { startedAt: "desc" }; take: 1 };
-    _count: { select: { runs: true } };
+    _count: { select: { runs: true; enrollments: true } };
+    enrollments: { select: { status: true } };
   };
 }>;
+
+/** Summarises enrollment counts for a single automation row. */
+function enrollmentCounts(enrollments: Array<{ status: string }>) {
+  let active = 0, completed = 0, failed = 0;
+  for (const e of enrollments) {
+    if (e.status === "ACTIVE" || e.status === "WAITING") active++;
+    else if (e.status === "COMPLETED") completed++;
+    else if (e.status === "FAILED") failed++;
+  }
+  return { total: enrollments.length, active, completed, failed };
+}
 
 export default async function AutomationsPage() {
   try {
@@ -45,7 +57,8 @@ async function AutomationsContent() {
       orderBy: { updatedAt: "desc" },
       include: {
         runs: { orderBy: { startedAt: "desc" }, take: 1 },
-        _count: { select: { runs: true } },
+        _count: { select: { runs: true, enrollments: true } },
+        enrollments: { select: { status: true } },
       },
     });
     failedRunCount = await prisma.automationRun.count({
@@ -126,6 +139,7 @@ async function AutomationsContent() {
               const triggerLabel = def.triggers[0]
                 ? (triggerCatalog.find((t) => t.type === def.triggers[0].type)?.label ?? def.triggers[0].type)
                 : null;
+              const enc = enrollmentCounts(automation.enrollments);
 
               return (
                 <div
@@ -167,6 +181,29 @@ async function AutomationsContent() {
                         </span>
                       ) : null}
                     </div>
+                    {/* Enrollment stat pills */}
+                    {enc.total > 0 ? (
+                      <div className="mt-1.5 flex items-center gap-2 flex-wrap">
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                          {enc.total} enrolled
+                        </span>
+                        {enc.active > 0 && (
+                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                            {enc.active} active
+                          </span>
+                        )}
+                        {enc.completed > 0 && (
+                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                            {enc.completed} completed
+                          </span>
+                        )}
+                        {enc.failed > 0 && (
+                          <span className="rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-semibold text-red-700">
+                            {enc.failed} failed
+                          </span>
+                        )}
+                      </div>
+                    ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Link

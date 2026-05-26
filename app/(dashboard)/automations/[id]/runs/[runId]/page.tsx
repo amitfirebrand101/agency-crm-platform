@@ -2,20 +2,14 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   ArrowLeft,
-  CheckCircle2,
-  Clock,
   RefreshCw,
-  XCircle,
-  AlertTriangle,
-  Loader2,
-  UserCheck,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardBody, CardHeader } from "@/components/ui/card";
+import { Card, CardBody } from "@/components/ui/card";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { retryWorkflowRun } from "@/app/(dashboard)/automations/actions";
+import { RunDetailClient } from "./_client";
 
 type PageProps = { params: Promise<{ id: string; runId: string }> };
 
@@ -36,15 +30,40 @@ export default async function RunDetailPage({ params }: PageProps) {
   if (!run) notFound();
 
   const contact = run.contactId
-    ? await prisma.contact.findUnique({
-        where: { id: run.contactId },
-        select: { id: true, firstName: true, lastName: true, email: true },
-      }).catch(() => null)
+    ? await prisma.contact
+        .findUnique({
+          where: { id: run.contactId },
+          select: { id: true, firstName: true, lastName: true, email: true },
+        })
+        .catch(() => null)
     : null;
 
-  const durationMs = run.completedAt
-    ? run.completedAt.getTime() - run.startedAt.getTime()
-    : null;
+  const durationMs =
+    run.completedAt ? run.completedAt.getTime() - run.startedAt.getTime() : null;
+
+  // Serialise dates before passing to client component
+  const serialisedRun = {
+    id: run.id,
+    status: run.status,
+    triggerType: run.triggerType,
+    startedAt: run.startedAt.toISOString(),
+    completedAt: run.completedAt?.toISOString() ?? null,
+    error: run.error ?? null,
+    contactId: run.contactId ?? null,
+    payload: run.payload as Record<string, unknown> | null,
+    stepRuns: run.stepRuns.map((s) => ({
+      id: s.id,
+      stepId: s.stepId,
+      stepType: s.stepType,
+      stepName: s.stepName ?? null,
+      status: s.status,
+      input: s.input as Record<string, unknown>,
+      output: s.output as Record<string, unknown> | null,
+      error: s.error as Record<string, unknown> | null,
+      startedAt: s.startedAt?.toISOString() ?? null,
+      endedAt: s.endedAt?.toISOString() ?? null,
+    })),
+  };
 
   return (
     <div className="space-y-6">
@@ -61,40 +80,55 @@ export default async function RunDetailPage({ params }: PageProps) {
         <RunBadge status={run.status} />
       </div>
 
-      {/* Meta */}
+      {/* Meta cards */}
       <div className="grid gap-3 sm:grid-cols-3">
-        <Card><CardBody>
-          <div className="text-xs text-muted mb-0.5">Trigger</div>
-          <div className="font-semibold capitalize text-sm">{run.triggerType.replace(/_/g, " ").toLowerCase()}</div>
-        </CardBody></Card>
-        <Card><CardBody>
-          <div className="text-xs text-muted mb-0.5">Started</div>
-          <div className="font-semibold text-sm">{new Date(run.startedAt).toLocaleString()}</div>
-          {durationMs !== null && (
-            <div className="text-xs text-muted">{durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(1)}s`}</div>
-          )}
-        </CardBody></Card>
-        <Card><CardBody>
-          <div className="text-xs text-muted mb-0.5">Contact</div>
-          {contact ? (
-            <Link href={`/contacts/${contact.id}`} className="font-semibold text-sm text-primary hover:underline">
-              {contact.firstName} {contact.lastName ?? ""}
-            </Link>
-          ) : (
-            <div className="text-sm text-muted">{run.contactId ? run.contactId.slice(0, 8) : "—"}</div>
-          )}
-        </CardBody></Card>
+        <Card>
+          <CardBody>
+            <div className="text-xs text-muted mb-0.5">Trigger</div>
+            <div className="font-semibold capitalize text-sm">
+              {run.triggerType.replace(/_/g, " ").toLowerCase()}
+            </div>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardBody>
+            <div className="text-xs text-muted mb-0.5">Started</div>
+            <div className="font-semibold text-sm">{new Date(run.startedAt).toLocaleString()}</div>
+            {durationMs !== null && (
+              <div className="text-xs text-muted">
+                {durationMs < 1000 ? `${durationMs}ms` : `${(durationMs / 1000).toFixed(1)}s`}
+              </div>
+            )}
+          </CardBody>
+        </Card>
+        <Card>
+          <CardBody>
+            <div className="text-xs text-muted mb-0.5">Contact</div>
+            {contact ? (
+              <Link
+                href={`/contacts/${contact.id}`}
+                className="font-semibold text-sm text-primary hover:underline"
+              >
+                {contact.firstName} {contact.lastName ?? ""}
+              </Link>
+            ) : (
+              <div className="text-sm text-muted">
+                {run.contactId ? run.contactId.slice(0, 8) : "—"}
+              </div>
+            )}
+          </CardBody>
+        </Card>
       </div>
 
-      {/* Error */}
+      {/* Top-level error */}
       {run.error && (
         <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
           <p className="text-xs font-semibold text-red-700 mb-0.5">Run failed</p>
-          <p className="text-sm text-red-600">{run.error}</p>
+          <p className="text-sm text-red-600 whitespace-pre-wrap break-words">{run.error}</p>
         </div>
       )}
 
-      {/* Actions */}
+      {/* Retry action */}
       {run.status === "FAILED" && (
         <form action={retryWorkflowRun}>
           <input type="hidden" name="runId" value={run.id} />
@@ -108,72 +142,13 @@ export default async function RunDetailPage({ params }: PageProps) {
         </form>
       )}
 
-      {/* Step timeline */}
-      <Card>
-        <CardHeader>
-          <h2 className="font-semibold text-sm">Step Timeline</h2>
-          <span className="text-xs text-muted">{run.stepRuns.length} steps</span>
-        </CardHeader>
-        {run.stepRuns.length === 0 ? (
-          <CardBody>
-            <p className="text-sm text-muted">No step records for this run.</p>
-          </CardBody>
-        ) : (
-          <div className="divide-y divide-border">
-            {run.stepRuns.map((step, idx) => {
-              const output = step.output as Record<string, unknown> | null;
-              const error = step.error as Record<string, unknown> | null;
-              return (
-                <div key={step.id} className="px-5 py-3">
-                  <div className="flex items-start gap-3">
-                    <span className="mt-0.5 w-5 shrink-0 text-center text-xs font-bold text-muted">{idx + 1}</span>
-                    <StepStatusIcon status={step.status} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm">{step.stepName || step.stepType}</span>
-                        <span className="text-xs text-muted font-mono uppercase">{step.stepType}</span>
-                        <StepBadge status={step.status} />
-                      </div>
-                      {error?.message != null && (
-                        <p className="mt-0.5 text-xs text-red-600">{String(error.message)}</p>
-                      )}
-                      {output && Object.keys(output).length > 0 && (
-                        <div className="mt-1.5 rounded-md bg-background border border-border px-3 py-1.5">
-                          <pre className="text-xs text-muted overflow-x-auto">
-                            {JSON.stringify(output, null, 2)}
-                          </pre>
-                        </div>
-                      )}
-                    </div>
-                    {step.endedAt && step.startedAt && (
-                      <span className="shrink-0 text-xs text-muted">
-                        {Math.round(
-                          (new Date(step.endedAt).getTime() - new Date(step.startedAt).getTime())
-                        )}ms
-                      </span>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Card>
-
-      {/* Trigger payload */}
-      {run.payload && (
-        <Card>
-          <CardHeader><h2 className="font-semibold text-sm">Trigger Payload</h2></CardHeader>
-          <CardBody>
-            <pre className="text-xs text-muted overflow-x-auto">
-              {JSON.stringify(run.payload, null, 2)}
-            </pre>
-          </CardBody>
-        </Card>
-      )}
+      {/* Step timeline + payload — client component for collapsible JSON */}
+      <RunDetailClient run={serialisedRun} />
     </div>
   );
 }
+
+// ── Helpers ────────────────────────────────────────────────────────────────────
 
 function RunBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
@@ -182,34 +157,13 @@ function RunBadge({ status }: { status: string }) {
     WAITING: "bg-amber-100 text-amber-700",
     RUNNING: "bg-blue-100 text-blue-700",
     CANCELLED: "bg-gray-100 text-gray-600",
+    QUEUED: "bg-gray-100 text-gray-600",
   };
   return (
-    <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${map[status] ?? "bg-gray-100 text-gray-600"}`}>
+    <span
+      className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${map[status] ?? "bg-gray-100 text-gray-600"}`}
+    >
       {status.toLowerCase()}
     </span>
   );
-}
-
-function StepBadge({ status }: { status: string }) {
-  const map: Record<string, string> = {
-    COMPLETED: "text-emerald-600",
-    FAILED: "text-red-600",
-    SKIPPED: "text-muted",
-    WAITING: "text-amber-600",
-    RUNNING: "text-blue-600",
-  };
-  return (
-    <span className={`text-xs font-medium capitalize ${map[status] ?? "text-muted"}`}>
-      {status.toLowerCase()}
-    </span>
-  );
-}
-
-function StepStatusIcon({ status }: { status: string }) {
-  if (status === "COMPLETED") return <CheckCircle2 size={15} className="mt-0.5 shrink-0 text-emerald-600" />;
-  if (status === "FAILED") return <XCircle size={15} className="mt-0.5 shrink-0 text-red-500" />;
-  if (status === "WAITING") return <Clock size={15} className="mt-0.5 shrink-0 text-amber-500" />;
-  if (status === "RUNNING") return <Loader2 size={15} className="mt-0.5 shrink-0 animate-spin text-blue-500" />;
-  if (status === "SKIPPED") return <AlertTriangle size={15} className="mt-0.5 shrink-0 text-muted" />;
-  return <AlertTriangle size={15} className="mt-0.5 shrink-0 text-muted" />;
 }

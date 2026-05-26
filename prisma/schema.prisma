@@ -111,6 +111,7 @@ model User {
   agencyMemberships     AgencyMembership[]
   subAccountMemberships SubAccountMembership[]
   assignedContacts      Contact[]              @relation("AssignedContacts")
+  assignedTasks         ContactTask[]          @relation("AssignedTasks")
   auditLogs             AuditLog[]
   sentInvites           UserInvite[]           @relation("SentInvites")
 }
@@ -229,10 +230,31 @@ model Contact {
   opportunities  Opportunity[]
   conversations  Conversation[]
   appointments   Appointment[]
+  tasks          ContactTask[]
 
   @@index([agencyId, subAccountId])
   @@index([subAccountId, email])
   @@index([subAccountId, phone])
+}
+
+model ContactTask {
+  id             String    @id @default(uuid()) @db.Uuid
+  agencyId       String    @db.Uuid
+  subAccountId   String    @db.Uuid
+  contactId      String    @db.Uuid
+  assignedUserId String?   @db.Uuid
+  title          String
+  dueDate        DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  contact        Contact   @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  assignedUser   User?     @relation("AssignedTasks", fields: [assignedUserId], references: [id], onDelete: SetNull)
+
+  @@index([agencyId, subAccountId])
+  @@index([contactId])
+  @@index([assignedUserId])
+  @@index([dueDate])
 }
 
 model Tag {
@@ -328,6 +350,9 @@ model Opportunity {
   name         String
   valueCents   Int               @default(0)
   status       OpportunityStatus @default(OPEN)
+  lostReason   String?
+  closeDate    DateTime?
+  notes        String?           @db.Text
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
   stage        PipelineStage     @relation(fields: [stageId], references: [id], onDelete: Cascade)

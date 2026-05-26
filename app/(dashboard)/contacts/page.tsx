@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Plus, Search, Tags, Upload, UserRound } from "lucide-react";
+import { Search, Tags, Upload, UserRound } from "lucide-react";
 import type { Prisma } from "@prisma/client";
-import { createContact, createCustomField, createTag } from "@/app/(dashboard)/contacts/actions";
+import { createCustomField, createTag } from "@/app/(dashboard)/contacts/actions";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { DbWarning } from "@/components/ui/db-warning";
 import { Field } from "@/components/ui/field";
@@ -10,10 +10,28 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ContactTable } from "./contact-table";
 import { Pagination } from "./pagination";
+import { CreateContactForm } from "./create-contact-form";
 
 export const dynamic = "force-dynamic";
 
-type ContactWithTags = Prisma.ContactGetPayload<{ include: { tags: { include: { tag: { select: { id: true; name: true; color: true } } } } } }>;
+type ContactWithRelations = Prisma.ContactGetPayload<{
+  include: {
+    tags: { include: { tag: { select: { id: true; name: true; color: true } } } };
+    conversations: { orderBy: { createdAt: "desc" }; take: 1; select: { createdAt: true } };
+    appointments: { orderBy: { createdAt: "desc" }; take: 1; select: { createdAt: true } };
+    assignedUser: { select: { id: true; name: true; email: true } };
+  };
+}>;
+
+function relTime(d: Date | null): string {
+  if (!d) return "Never";
+  const s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 60) return "just now";
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  if (s < 604800) return `${Math.floor(s / 86400)}d ago`;
+  return d.toLocaleDateString();
+}
 
 const PAGE_SIZE = 50;
 
@@ -29,7 +47,7 @@ export default async function ContactsPage({
 
   const user = await requireUser();
   let databaseUnavailable = false;
-  let contacts: ContactWithTags[] = [];
+  let contacts: ContactWithRelations[] = [];
   let tags: Awaited<ReturnType<typeof prisma.tag.findMany>> = [];
   let customFields: Awaited<ReturnType<typeof prisma.customField.findMany>> = [];
   let totalContacts = 0;
@@ -67,7 +85,12 @@ export default async function ContactsPage({
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         skip,
         take: PAGE_SIZE + 1,
-        include: { tags: { include: { tag: { select: { id: true, name: true, color: true } } } } }
+        include: {
+          tags: { include: { tag: { select: { id: true, name: true, color: true } } } },
+          conversations: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+          appointments: { orderBy: { createdAt: "desc" }, take: 1, select: { createdAt: true } },
+          assignedUser: { select: { id: true, name: true, email: true } },
+        },
       }),
       prisma.tag.findMany({
         where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
@@ -194,17 +217,31 @@ export default async function ContactsPage({
               <>
                 <div className="px-0">
                   <ContactTable
-                    contacts={pageContacts.map((c) => ({
-                      id: c.id,
-                      firstName: c.firstName,
-                      lastName: c.lastName,
-                      email: c.email,
-                      phone: c.phone,
-                      companyName: c.companyName,
-                      status: c.status,
-                      createdAt: c.createdAt.toISOString(),
-                      tags: c.tags.map((ct) => ({ tag: ct.tag })),
-                    }))}
+                    contacts={pageContacts.map((c) => {
+                      const lastConvDate = c.conversations[0]?.createdAt ?? null;
+                      const lastApptDate = c.appointments[0]?.createdAt ?? null;
+                      const lastActivityDate =
+                        lastConvDate && lastApptDate
+                          ? lastConvDate > lastApptDate
+                            ? lastConvDate
+                            : lastApptDate
+                          : lastConvDate ?? lastApptDate;
+                      return {
+                        id: c.id,
+                        firstName: c.firstName,
+                        lastName: c.lastName,
+                        email: c.email,
+                        phone: c.phone,
+                        companyName: c.companyName,
+                        status: c.status,
+                        createdAt: c.createdAt.toISOString(),
+                        tags: c.tags.map((ct) => ({ tag: ct.tag })),
+                        lastActivity: relTime(lastActivityDate),
+                        assignedUser: c.assignedUser
+                          ? { id: c.assignedUser.id, name: c.assignedUser.name, email: c.assignedUser.email }
+                          : null,
+                      };
+                    })}
                     tags={tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
                   />
                 </div>
@@ -230,32 +267,7 @@ export default async function ContactsPage({
 
         {/* Right panel */}
         <div className="space-y-4">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center gap-2">
-                <Plus className="text-primary" size={18} />
-                <h2 className="font-semibold">New contact</h2>
-              </div>
-            </CardHeader>
-            <CardBody>
-              <form action={createContact} className="space-y-3">
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="First name" name="firstName" required />
-                  <Field label="Last name" name="lastName" />
-                </div>
-                <Field label="Email" name="email" type="email" />
-                <Field label="Phone" name="phone" type="tel" />
-                <Field label="Company" name="companyName" />
-                <Field label="Source" name="source" placeholder="Website, referral…" />
-                <SubmitButton
-                  className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
-                  pendingText="Creating…"
-                >
-                  Create contact
-                </SubmitButton>
-              </form>
-            </CardBody>
-          </Card>
+          <CreateContactForm />
 
           <Card>
             <CardHeader>

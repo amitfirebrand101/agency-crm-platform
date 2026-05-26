@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Calendar, CheckCircle2, ChevronLeft, ChevronRight, Clock, Loader2, MapPin, Video } from "lucide-react";
+import { TimezoneDisplay } from "./timezone-display";
 
 type CalendarInfo = {
   id: string;
@@ -231,28 +232,31 @@ export default function BookingPage({ params }: { params: Promise<{ calendarId: 
             </div>
 
             <div className="rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
-              <h2 className="mb-4 font-semibold text-gray-900">Select a time</h2>
-              {loadingSlots ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="animate-spin text-blue-500" size={28} />
-                </div>
-              ) : slots.length === 0 ? (
-                <div className="py-8 text-center text-sm text-gray-500">
-                  No available slots on this day. Please pick another date.
-                </div>
-              ) : (
-                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-                  {slots.map((s) => (
-                    <button
-                      key={s.start}
-                      onClick={() => { setSelectedSlot(s); setStep("form"); }}
-                      className="rounded-lg border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-900 hover:border-blue-500 hover:bg-blue-50 transition"
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+              <h2 className="mb-1 font-semibold text-gray-900">Select a time</h2>
+              <TimezoneDisplay />
+              <div className="mt-4">
+                {loadingSlots ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="animate-spin text-blue-500" size={28} />
+                  </div>
+                ) : slots.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-gray-500">
+                    No available slots on this day. Please pick another date.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {slots.map((s) => (
+                      <button
+                        key={s.start}
+                        onClick={() => { setSelectedSlot(s); setStep("form"); }}
+                        className="rounded-lg border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-900 hover:border-blue-500 hover:bg-blue-50 transition"
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

@@ -6,6 +6,12 @@ import { Download, Loader2, Tag, Trash2, User, X } from "lucide-react";
 import { Badge, statusVariant } from "@/components/ui/badge";
 import { bulkAddTag, bulkDelete, bulkRemoveTag, bulkUpdateStatus } from "./bulk-actions";
 
+type AssignedUser = {
+  id: string;
+  name: string | null;
+  email: string;
+};
+
 type ContactRow = {
   id: string;
   firstName: string;
@@ -16,6 +22,8 @@ type ContactRow = {
   status: string;
   createdAt: string;
   tags: Array<{ tag: { id: string; name: string; color: string } }>;
+  lastActivity: string;
+  assignedUser: AssignedUser | null;
 };
 
 type TagOption = { id: string; name: string; color: string };
@@ -245,7 +253,7 @@ export function ContactTable({
       )}
 
       <div className="overflow-x-auto rounded-xl border border-border" ref={formRef}>
-        <table className="w-full min-w-[860px] text-left text-sm">
+        <table className="w-full min-w-[1100px] text-left text-sm">
           <thead className="border-b border-border bg-background text-muted">
             <tr>
               <th className="px-4 py-3 w-10">
@@ -262,6 +270,8 @@ export function ContactTable({
               <th className="px-4 py-3 font-semibold">Phone</th>
               <th className="px-4 py-3 font-semibold">Tags</th>
               <th className="px-4 py-3 font-semibold">Status</th>
+              <th className="px-4 py-3 font-semibold">Last Activity</th>
+              <th className="px-4 py-3 font-semibold">Assigned</th>
               <th className="px-4 py-3 font-semibold">Added</th>
               <th className="px-4 py-3 font-semibold sr-only">Actions</th>
             </tr>
@@ -353,6 +363,32 @@ export function ContactTable({
                   </td>
                   <td className="px-4 py-3">
                     <Badge variant={statusVariant(contact.status)}>{contact.status}</Badge>
+                  </td>
+                  <td className="px-4 py-3 text-muted whitespace-nowrap">
+                    {contact.lastActivity}
+                  </td>
+                  <td className="px-4 py-3">
+                    {contact.assignedUser ? (
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="flex size-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white"
+                          style={{ backgroundColor: avatarBg(contact.assignedUser.name ?? contact.assignedUser.email) }}
+                          title={contact.assignedUser.name ?? contact.assignedUser.email}
+                        >
+                          {(contact.assignedUser.name ?? contact.assignedUser.email)
+                            .split(" ")
+                            .map((p) => p[0])
+                            .join("")
+                            .toUpperCase()
+                            .slice(0, 2)}
+                        </div>
+                        <span className="text-sm text-foreground truncate max-w-[8rem]">
+                          {contact.assignedUser.name ?? contact.assignedUser.email}
+                        </span>
+                      </div>
+                    ) : (
+                      <span className="text-muted">—</span>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-muted">
                     {new Date(contact.createdAt).toLocaleDateString()}

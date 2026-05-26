@@ -1,6 +1,17 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Building2, Mail, Phone, Target, Trash2, User } from "lucide-react";
+import {
+  ArrowLeft,
+  Building2,
+  CalendarDays,
+  Mail,
+  MessageSquare,
+  Phone,
+  Target,
+  Trash2,
+  User,
+  Zap,
+} from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import {
   deleteOpportunity,
@@ -22,13 +33,27 @@ type Props = { params: Promise<{ id: string }> };
 type OpportunityDetail = Prisma.OpportunityGetPayload<{
   include: {
     stage: { include: { pipeline: true } };
-    contact: true;
+    contact: {
+      include: {
+        conversations: true;
+        appointments: {
+          include: { calendar: { select: { name: true; timezone: true } } };
+        };
+      };
+    };
   };
 }>;
 
 type PipelineWithStages = Prisma.PipelineGetPayload<{
   include: { stages: { orderBy: { position: "asc" } } };
 }>;
+
+type AutomationEventRow = {
+  id: string;
+  type: string;
+  source: string;
+  createdAt: Date;
+};
 
 const AVATAR_COLORS = [
   "#3b82f6",
@@ -44,12 +69,24 @@ function avatarBg(name: string): string {
   return AVATAR_COLORS[(name.charCodeAt(0) || 0) % AVATAR_COLORS.length];
 }
 
+function relativeTime(date: Date): string {
+  const days = Math.floor((Date.now() - date.getTime()) / 86400000);
+  if (days === 0) return "Today";
+  if (days === 1) return "1d ago";
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  if (months === 1) return "1mo ago";
+  if (months < 12) return `${months}mo ago`;
+  return `${Math.floor(months / 12)}y ago`;
+}
+
 export default async function OpportunityDetailPage({ params }: Props) {
   const { id } = await params;
   const user = await requireUser();
 
   let opportunity: OpportunityDetail | null = null;
   let pipelines: PipelineWithStages[] = [];
+  let automationEvents: AutomationEventRow[] = [];
   let dbError = false;
 
   try {
@@ -62,7 +99,16 @@ export default async function OpportunityDetailPage({ params }: Props) {
         },
         include: {
           stage: { include: { pipeline: true } },
-          contact: true,
+          contact: {
+            include: {
+              conversations: { orderBy: { createdAt: "desc" }, take: 5 },
+              appointments: {
+                orderBy: { startsAt: "desc" },
+                take: 5,
+                include: { calendar: { select: { name: true, timezone: true } } },
+              },
+            },
+          },
         },
       }),
       prisma.pipeline.findMany({
@@ -76,6 +122,20 @@ export default async function OpportunityDetailPage({ params }: Props) {
         orderBy: { createdAt: "asc" },
       }),
     ]);
+
+    // Load automation events linked to the contact if one is present
+    if (opportunity?.contactId) {
+      automationEvents = await prisma.automationEvent.findMany({
+        where: {
+          agencyId: user.agencyId,
+          subAccountId: user.subAccountId ?? undefined,
+          contactId: opportunity.contactId,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        select: { id: true, type: true, source: true, createdAt: true },
+      });
+    }
   } catch (error) {
     console.error("Opportunity detail page database query failed", error);
     dbError = true;
@@ -107,6 +167,65 @@ export default async function OpportunityDetailPage({ params }: Props) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+
+  const closeDateValue = opportunity.closeDate
+    ? opportunity.closeDate.toISOString().slice(0, 10)
+    : "";
+
+  // Build merged activity feed
+  type FeedItem = {
+    id: string;
+    icon: "message" | "calendar" | "automation";
+    label: string;
+    detail: string;
+    date: Date;
+  };
+
+  const feed: FeedItem[] = [];
+
+  if (opportunity.contact) {
+    for (const conv of opportunity.contact.conversations) {
+      const firstName = opportunity.contact.firstName;
+      const channelLabel =
+        conv.channel === "EMAIL"
+          ? `Email from ${firstName}`
+          : conv.channel === "SMS"
+            ? `SMS from ${firstName}`
+            : conv.channel === "CALL"
+              ? `Call with ${firstName}`
+              : `Message from ${firstName}`;
+      feed.push({
+        id: conv.id,
+        icon: "message",
+        label: channelLabel,
+        detail: conv.subject ?? conv.channel,
+        date: new Date(conv.createdAt),
+      });
+    }
+
+    for (const apt of opportunity.contact.appointments) {
+      feed.push({
+        id: apt.id,
+        icon: "calendar",
+        label: apt.title,
+        detail: apt.calendar.name,
+        date: new Date(apt.startsAt),
+      });
+    }
+  }
+
+  for (const evt of automationEvents) {
+    feed.push({
+      id: evt.id,
+      icon: "automation",
+      label: evt.type.replace(/_/g, " "),
+      detail: `via ${evt.source}`,
+      date: new Date(evt.createdAt),
+    });
+  }
+
+  feed.sort((a, b) => b.date.getTime() - a.date.getTime());
+  const recentFeed = feed.slice(0, 10);
 
   return (
     <div className="space-y-6">
@@ -185,6 +304,52 @@ export default async function OpportunityDetailPage({ params }: Props) {
                     <option value="LOST">Lost</option>
                   </select>
                 </label>
+
+                {/* Lost reason — always rendered, labelled to explain conditionality */}
+                <div>
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+                      Reason for loss (required if lost)
+                    </span>
+                    <input
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-primary/20 focus:ring-4"
+                      defaultValue={opportunity.lostReason ?? ""}
+                      maxLength={500}
+                      name="lostReason"
+                      placeholder="e.g. Budget, competitor, timing…"
+                      type="text"
+                    />
+                  </label>
+                </div>
+
+                {/* Close date */}
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+                    Close date
+                  </span>
+                  <input
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-primary/20 focus:ring-4"
+                    defaultValue={closeDateValue}
+                    name="closeDate"
+                    type="date"
+                  />
+                </label>
+
+                {/* Notes */}
+                <label className="block">
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
+                    Notes
+                  </span>
+                  <textarea
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-primary/20 focus:ring-4 resize-y"
+                    defaultValue={opportunity.notes ?? ""}
+                    maxLength={5000}
+                    name="notes"
+                    placeholder="Add any notes about this deal…"
+                    rows={4}
+                  />
+                </label>
+
                 <SubmitButton
                   className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
                   pendingText="Saving…"
@@ -194,6 +359,20 @@ export default async function OpportunityDetailPage({ params }: Props) {
               </form>
             </CardBody>
           </Card>
+
+          {/* Notes readonly display (when notes exist) */}
+          {opportunity.notes ? (
+            <Card className="bg-muted/30">
+              <CardHeader>
+                <h2 className="font-semibold text-sm">Deal notes</h2>
+              </CardHeader>
+              <CardBody>
+                <p className="whitespace-pre-wrap text-sm text-foreground/80 leading-relaxed">
+                  {opportunity.notes}
+                </p>
+              </CardBody>
+            </Card>
+          ) : null}
 
           {/* Move to stage form */}
           <Card>
@@ -261,6 +440,22 @@ export default async function OpportunityDetailPage({ params }: Props) {
                     </Badge>
                   </dd>
                 </div>
+                {opportunity.closeDate ? (
+                  <div className="flex items-center justify-between py-2.5">
+                    <dt className="text-muted">Close date</dt>
+                    <dd className="font-semibold">
+                      {new Date(opportunity.closeDate).toLocaleDateString()}
+                    </dd>
+                  </div>
+                ) : null}
+                {opportunity.lostReason ? (
+                  <div className="flex items-start justify-between gap-3 py-2.5">
+                    <dt className="shrink-0 text-muted">Lost reason</dt>
+                    <dd className="text-right text-xs text-foreground/80 font-medium">
+                      {opportunity.lostReason}
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
             </CardBody>
           </Card>
@@ -329,12 +524,20 @@ export default async function OpportunityDetailPage({ params }: Props) {
                       </div>
                     ) : null}
                   </div>
-                  <Link
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-                    href={`/contacts/${opportunity.contact.id}`}
-                  >
-                    View contact &rarr;
-                  </Link>
+                  <div className="flex flex-col gap-1.5 pt-1">
+                    <Link
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                      href={`/contacts/${opportunity.contact.id}`}
+                    >
+                      View contact &rarr;
+                    </Link>
+                    <Link
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                      href={`/conversations?contactId=${opportunity.contact.id}`}
+                    >
+                      View conversations &rarr;
+                    </Link>
+                  </div>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -346,6 +549,41 @@ export default async function OpportunityDetailPage({ params }: Props) {
                     Browse contacts &rarr;
                   </Link>
                 </div>
+              )}
+            </CardBody>
+          </Card>
+
+          {/* Activity feed */}
+          <Card>
+            <CardHeader>
+              <h2 className="font-semibold">Recent activity</h2>
+            </CardHeader>
+            <CardBody>
+              {recentFeed.length === 0 ? (
+                <p className="text-sm text-muted">No activity yet.</p>
+              ) : (
+                <ul className="space-y-3">
+                  {recentFeed.map((item) => (
+                    <li key={item.id} className="flex items-start gap-3">
+                      <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-muted/40">
+                        {item.icon === "message" ? (
+                          <MessageSquare className="text-muted" size={13} />
+                        ) : item.icon === "calendar" ? (
+                          <CalendarDays className="text-muted" size={13} />
+                        ) : (
+                          <Zap className="text-muted" size={13} />
+                        )}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">{item.label}</p>
+                        <p className="truncate text-xs text-muted">{item.detail}</p>
+                      </div>
+                      <span className="shrink-0 text-xs text-muted">
+                        {relativeTime(item.date)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
               )}
             </CardBody>
           </Card>

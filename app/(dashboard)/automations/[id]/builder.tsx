@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState, useTransition, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -63,6 +63,22 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
   const [isPending, startTransition] = useTransition();
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
   const nameRef = useRef<HTMLInputElement>(null);
+
+  // ── Unsaved-changes guard ─────────────────────────────────────────────────
+  // Warn the browser before unload when there are pending changes. This is
+  // intentionally a no-op on Next.js client-side navigation (which doesn't
+  // fire beforeunload); the amber warning bar below handles that case visually.
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Required for legacy browser compat — the string value is ignored by
+      // modern browsers but the assignment itself triggers the native dialog.
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirty]);
 
   const runValidation = useCallback(() => {
     const { errors } = validateDefinition(definition);
@@ -359,6 +375,27 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
           </form>
         </div>
       </div>
+
+      {/* ─── Unsaved-changes warning bar ─────────────────────────────── */}
+      {dirty && (
+        <div className="shrink-0 border-b border-amber-300 bg-amber-50 px-4 py-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle size={14} className="shrink-0 text-amber-600" />
+            <p className="flex-1 text-xs font-semibold text-amber-700">
+              You have unsaved changes. Save before leaving.
+            </p>
+            <button
+              className="shrink-0 flex items-center gap-1.5 rounded-md bg-amber-600 px-2.5 py-1 text-xs font-semibold text-white hover:bg-amber-700 transition disabled:opacity-50"
+              disabled={saving}
+              onClick={handleSave}
+              type="button"
+            >
+              <Save size={11} />
+              {saving ? "Saving…" : "Save now"}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ─── Validation banner ───────────────────────────────────────── */}
       {validationErrors.length > 0 && (

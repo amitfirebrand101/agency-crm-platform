@@ -169,6 +169,8 @@ export async function moveOpportunityToStage(formData: FormData) {
 
   await prisma.opportunity.update({ where: { id: opp.id }, data: { stageId } });
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "UPDATE", entityType: "Opportunity", entityId: opp.id, metadata: { stageId } });
+  // PIPELINE_STAGE_CHANGED event fires here — wired to kanban DnD via KanbanBoard.handleDragEnd.
+  // Automations with a PIPELINE_STAGE_CHANGED trigger will be enrolled for any matching contacts.
   await runAutomationsForEvent({
     type: "PIPELINE_STAGE_CHANGED",
     agencyId: user.agencyId,
@@ -195,6 +197,8 @@ export async function updateOpportunityStatus(formData: FormData) {
 
   await prisma.opportunity.update({ where: { id: opp.id }, data: { status } });
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "UPDATE", entityType: "Opportunity", entityId: opp.id, metadata: { status } });
+  // OPPORTUNITY_STATUS event fires here — called by kanban Won/Lost buttons via KanbanBoard.handleStatusChange.
+  // Automations with an OPPORTUNITY_STATUS trigger will be enrolled for any matching contacts.
   await runAutomationsForEvent({
     type: "OPPORTUNITY_STATUS",
     agencyId: user.agencyId,
@@ -270,6 +274,9 @@ export async function updateOpportunity(formData: FormData) {
       name: z.string().trim().min(1).max(200),
       value: z.coerce.number().min(0).default(0),
       status: z.enum(["OPEN", "WON", "LOST"]),
+      lostReason: z.string().trim().max(500).optional(),
+      closeDate: z.string().optional(),
+      notes: z.string().trim().max(5000).optional(),
     })
     .parse(Object.fromEntries(formData));
 
@@ -277,12 +284,17 @@ export async function updateOpportunity(formData: FormData) {
     where: { id: input.opportunityId, agencyId: user.agencyId, subAccountId: user.subAccountId },
   });
 
+  const closeDate = input.closeDate ? new Date(input.closeDate) : null;
+
   await prisma.opportunity.update({
     where: { id: opp.id },
     data: {
       name: input.name,
       valueCents: Math.round(input.value * 100),
       status: input.status,
+      lostReason: input.lostReason || null,
+      closeDate,
+      notes: input.notes || null,
     },
   });
 
@@ -292,7 +304,13 @@ export async function updateOpportunity(formData: FormData) {
     action: "UPDATE",
     entityType: "Opportunity",
     entityId: opp.id,
-    metadata: { name: input.name, status: input.status, valueCents: Math.round(input.value * 100) },
+    metadata: {
+      name: input.name,
+      status: input.status,
+      valueCents: Math.round(input.value * 100),
+      lostReason: input.lostReason || null,
+      closeDate: closeDate?.toISOString() ?? null,
+    },
   });
 
   revalidatePath("/opportunities");
