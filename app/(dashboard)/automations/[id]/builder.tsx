@@ -109,21 +109,26 @@ export function WorkflowBuilder({ automation, contacts, appUrl }: BuilderProps) 
       const errors = runValidation();
       if (errors.length > 0) return; // validation panel shows errors
     }
-    if (dirty) await handleSave();
+    if (dirty) {
+      try {
+        await handleSave();
+      } catch (err) {
+        alert(`Save failed: ${err instanceof Error ? err.message : String(err)}`);
+        return;
+      }
+    }
     const fd = new FormData();
     fd.set("automationId", automation.id);
     startTransition(async () => {
-      try {
-        if (status === "published") {
-          await unpublishWorkflow(fd);
-          setStatus("draft");
-        } else {
-          await publishWorkflow(fd);
-          setStatus("published");
-          setValidationErrors([]);
-        }
-      } catch (err) {
-        alert(String(err instanceof Error ? err.message : err));
+      if (status === "published") {
+        const result = await unpublishWorkflow(fd);
+        if (result?.error) { alert(result.error); return; }
+        setStatus("draft");
+      } else {
+        const result = await publishWorkflow(fd);
+        if (result?.error) { alert(result.error); return; }
+        setStatus("published");
+        setValidationErrors([]);
       }
     });
   };

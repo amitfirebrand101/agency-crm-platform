@@ -96,52 +96,60 @@ export async function duplicateWorkflow(formData: FormData) {
 
 // ── Publish / unpublish ───────────────────────────────────────────────────────
 
-export async function publishWorkflow(formData: FormData) {
+export async function publishWorkflow(formData: FormData): Promise<{ error: string } | undefined> {
   const automationId = String(formData.get("automationId") ?? "");
-  const { user, automation } = await requireExistingAutomation(automationId);
+
+  let user: Awaited<ReturnType<typeof requireExistingAutomation>>["user"];
+  let automation: Awaited<ReturnType<typeof requireExistingAutomation>>["automation"];
+  try {
+    ({ user, automation } = await requireExistingAutomation(automationId));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Authentication error. Please refresh." };
+  }
 
   const definition = parseDefinition(automation.definition);
   const { valid, errors } = validateDefinition(definition);
-  if (!valid) {
-    throw new Error(`Cannot publish: ${errors[0]}`);
+  if (!valid) return { error: `Cannot publish: ${errors[0]}` };
+
+  try {
+    // Create immutable version snapshot
+    const lastVersion = await prisma.automationVersion.findFirst({
+      where: { automationId: automation.id },
+      orderBy: { versionNumber: "desc" },
+      select: { versionNumber: true },
+    });
+
+    await prisma.$transaction([
+      prisma.automationVersion.create({
+        data: {
+          automationId: automation.id,
+          agencyId: user.agencyId,
+          subAccountId: user.subAccountId,
+          versionNumber: (lastVersion?.versionNumber ?? 0) + 1,
+          name: automation.name,
+          definition: automation.definition as object,
+          status: "PUBLISHED",
+          createdById: user.id,
+          publishedAt: new Date(),
+        },
+      }),
+      // Archive any previously published versions
+      prisma.automationVersion.updateMany({
+        where: {
+          automationId: automation.id,
+          status: "PUBLISHED",
+          versionNumber: { lte: lastVersion?.versionNumber ?? 0 },
+        },
+        data: { status: "ARCHIVED" },
+      }),
+      prisma.automation.update({
+        where: { id: automation.id },
+        data: { status: "published" },
+      }),
+    ]);
+  } catch (err) {
+    return { error: `Failed to publish: ${err instanceof Error ? err.message : String(err)}` };
   }
-
-  // Create immutable version snapshot
-  const lastVersion = await prisma.automationVersion.findFirst({
-    where: { automationId: automation.id },
-    orderBy: { versionNumber: "desc" },
-    select: { versionNumber: true },
-  });
-
-  await prisma.$transaction([
-    prisma.automationVersion.create({
-      data: {
-        automationId: automation.id,
-        agencyId: user.agencyId,
-        subAccountId: user.subAccountId,
-        versionNumber: (lastVersion?.versionNumber ?? 0) + 1,
-        name: automation.name,
-        definition: automation.definition as object,
-        status: "PUBLISHED",
-        createdById: user.id,
-        publishedAt: new Date(),
-      },
-    }),
-    // Archive any previously published versions
-    prisma.automationVersion.updateMany({
-      where: {
-        automationId: automation.id,
-        status: "PUBLISHED",
-        // exclude the one we just created by using the old versionNumber
-        versionNumber: { lte: lastVersion?.versionNumber ?? 0 },
-      },
-      data: { status: "ARCHIVED" },
-    }),
-    prisma.automation.update({
-      where: { id: automation.id },
-      data: { status: "published" },
-    }),
-  ]);
 
   await auditLog({
     agencyId: user.agencyId,
@@ -150,15 +158,28 @@ export async function publishWorkflow(formData: FormData) {
     entityType: "Automation",
     entityId: automation.id,
     metadata: { status: "published" },
-  });
+  }).catch(() => {});
   revalidatePath("/automations");
   revalidatePath(`/automations/${automationId}`);
 }
 
-export async function unpublishWorkflow(formData: FormData) {
+export async function unpublishWorkflow(formData: FormData): Promise<{ error: string } | undefined> {
   const automationId = String(formData.get("automationId") ?? "");
-  const { user, automation } = await requireExistingAutomation(automationId);
-  await prisma.automation.update({ where: { id: automation.id }, data: { status: "draft" } });
+
+  let user: Awaited<ReturnType<typeof requireExistingAutomation>>["user"];
+  let automation: Awaited<ReturnType<typeof requireExistingAutomation>>["automation"];
+  try {
+    ({ user, automation } = await requireExistingAutomation(automationId));
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Authentication error. Please refresh." };
+  }
+
+  try {
+    await prisma.automation.update({ where: { id: automation.id }, data: { status: "draft" } });
+  } catch (err) {
+    return { error: `Failed to unpublish: ${err instanceof Error ? err.message : String(err)}` };
+  }
+
   await auditLog({
     agencyId: user.agencyId,
     actorUserId: user.id,
@@ -166,7 +187,7 @@ export async function unpublishWorkflow(formData: FormData) {
     entityType: "Automation",
     entityId: automation.id,
     metadata: { status: "draft" },
-  });
+  }).catch(() => {});
   revalidatePath("/automations");
   revalidatePath(`/automations/${automationId}`);
 }
