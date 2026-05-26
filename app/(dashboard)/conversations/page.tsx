@@ -1,4 +1,4 @@
-import { Plus, MessageSquareText, Phone, Mail, MessageSquare, Voicemail, StickyNote, Send } from "lucide-react";
+import { Plus, MessageSquareText, Phone, Mail, MessageSquare, Voicemail, StickyNote, Send, ChevronLeft, ChevronRight } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { sendMessage, updateConversationStatus } from "@/app/(dashboard)/conversations/[id]/actions";
 import { createConversation } from "@/app/(dashboard)/module-actions";
@@ -8,6 +8,12 @@ import { Field } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+
+// ── Constants ─────────────────────────────────────────────────────────────────
+
+const CONV_PAGE_SIZE = 30;
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -81,17 +87,19 @@ function contactInitials(conv: ConversationWithContact | ConversationDetail): st
 export default async function ConversationsPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ id?: string; channel?: string; status?: string; q?: string }>;
+  searchParams?: Promise<{ id?: string; channel?: string; status?: string; q?: string; cpage?: string }>;
 }) {
   const params = await searchParams;
   const activeId = params?.id ?? null;
   const channelFilter = params?.channel ?? "";
   const statusFilter = params?.status ?? "";
   const q = params?.q ?? "";
+  const cpage = Math.max(1, parseInt(params?.cpage ?? "1", 10) || 1);
 
   const user = await requireUser();
   let databaseUnavailable = false;
   let conversations: ConversationWithContact[] = [];
+  let totalConversations = 0;
   let active: ConversationDetail | null = null;
 
   try {
@@ -102,12 +110,21 @@ export default async function ConversationsPage({
       ...(statusFilter ? { status: statusFilter as Prisma.EnumConversationStatusFilter } : {}),
     };
 
-    conversations = await prisma.conversation.findMany({
-      where,
-      orderBy: { updatedAt: "desc" },
-      take: 100,
-      include: { contact: true, messages: { orderBy: { createdAt: "desc" }, take: 1 } },
-    });
+    const skip = (cpage - 1) * CONV_PAGE_SIZE;
+
+    const [fetched, count] = await Promise.all([
+      prisma.conversation.findMany({
+        where,
+        orderBy: { updatedAt: "desc" },
+        skip,
+        take: CONV_PAGE_SIZE + 1,
+        include: { contact: true, messages: { orderBy: { createdAt: "desc" }, take: 1 } },
+      }),
+      prisma.conversation.count({ where }),
+    ]);
+
+    totalConversations = count;
+    conversations = fetched;
 
     if (activeId) {
       active = await prisma.conversation.findFirst({
@@ -124,24 +141,31 @@ export default async function ConversationsPage({
     console.error("Conversations page database query failed", error);
   }
 
-  // Client-side q filter (simple substring match on name + last message)
+  // Pagination state
+  const hasMoreConvs = conversations.length > CONV_PAGE_SIZE;
+  const pageConversations = hasMoreConvs ? conversations.slice(0, CONV_PAGE_SIZE) : conversations;
+  const totalPages = Math.max(1, Math.ceil(totalConversations / CONV_PAGE_SIZE));
+
+  // Client-side q filter applied after slice so pagination counts are by DB filter only.
+  // For search we re-filter the current page to match what the user typed.
   const filtered =
     q.trim()
-      ? conversations.filter((c) => {
+      ? pageConversations.filter((c) => {
           const name = contactName(c).toLowerCase();
           const preview = c.messages[0]?.body.toLowerCase() ?? "";
           const sq = q.toLowerCase();
           return name.includes(sq) || preview.includes(sq);
         })
-      : conversations;
+      : pageConversations;
 
-  // Build filter link helper
+  // Build filter link helper — preserves all current params
   function filterHref(overrides: Record<string, string>) {
     const merged: Record<string, string> = {
       ...(channelFilter ? { channel: channelFilter } : {}),
       ...(statusFilter ? { status: statusFilter } : {}),
       ...(activeId ? { id: activeId } : {}),
       ...(q ? { q } : {}),
+      ...(cpage > 1 ? { cpage: String(cpage) } : {}),
       ...overrides,
     };
     const qs = Object.entries(merged)
@@ -151,12 +175,27 @@ export default async function ConversationsPage({
     return `/conversations${qs ? `?${qs}` : ""}`;
   }
 
+  // Build a pagination href for the conversation list
+  function convPageHref(targetPage: number): string {
+    const sp = new URLSearchParams();
+    if (channelFilter) sp.set("channel", channelFilter);
+    if (statusFilter) sp.set("status", statusFilter);
+    if (activeId) sp.set("id", activeId);
+    if (q) sp.set("q", q);
+    if (targetPage > 1) sp.set("cpage", String(targetPage));
+    const qs = sp.toString();
+    return `/conversations${qs ? `?${qs}` : ""}`;
+  }
+
   const CHANNEL_FILTERS = [
     { label: "All", value: "" },
     { label: "SMS", value: "SMS" },
     { label: "Email", value: "EMAIL" },
     { label: "Call", value: "CALL" },
   ];
+
+  const rangeStart = totalConversations === 0 ? 0 : (cpage - 1) * CONV_PAGE_SIZE + 1;
+  const rangeEnd = Math.min(cpage * CONV_PAGE_SIZE, totalConversations);
 
   return (
     <div className="-mx-5 -my-6 lg:-mx-8 flex" style={{ height: "calc(100vh - 61px)" }}>
@@ -174,7 +213,7 @@ export default async function ConversationsPage({
             <div className="flex items-center gap-2">
               <h2 className="text-base font-semibold">Inbox</h2>
               <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                {conversations.length}
+                {totalConversations}
               </span>
             </div>
             {/* New conversation — reuse existing form in a popover-less inline approach */}
@@ -224,7 +263,7 @@ export default async function ConversationsPage({
                       ? "bg-primary text-white"
                       : "bg-background text-muted hover:text-foreground border border-border"
                   }`}
-                  href={filterHref({ channel: value })}
+                  href={filterHref({ channel: value, cpage: "1" })}
                   key={value || "all"}
                 >
                   {label}
@@ -305,6 +344,57 @@ export default async function ConversationsPage({
             })
           )}
         </div>
+
+        {/* Conversation list pagination */}
+        {totalPages > 1 && (
+          <div className="shrink-0 border-t border-border">
+            {totalConversations > 0 && (
+              <p className="pt-2 text-center text-[10px] text-muted">
+                {rangeStart}–{rangeEnd} of {totalConversations}
+              </p>
+            )}
+            <nav
+              aria-label="Conversations pagination"
+              className="flex items-center justify-between px-3 py-2"
+            >
+              {cpage > 1 ? (
+                <a
+                  href={convPageHref(cpage - 1)}
+                  aria-label="Previous conversations page"
+                  className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium transition hover:bg-panel"
+                >
+                  <ChevronLeft size={12} aria-hidden="true" />
+                  Prev
+                </a>
+              ) : (
+                <span className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted opacity-40 cursor-not-allowed select-none">
+                  <ChevronLeft size={12} aria-hidden="true" />
+                  Prev
+                </span>
+              )}
+
+              <span className="text-[10px] text-muted">
+                {cpage} / {totalPages}
+              </span>
+
+              {cpage < totalPages ? (
+                <a
+                  href={convPageHref(cpage + 1)}
+                  aria-label="Next conversations page"
+                  className="flex items-center gap-1 rounded-md border border-border bg-background px-2 py-1 text-xs font-medium transition hover:bg-panel"
+                >
+                  Next
+                  <ChevronRight size={12} aria-hidden="true" />
+                </a>
+              ) : (
+                <span className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted opacity-40 cursor-not-allowed select-none">
+                  Next
+                  <ChevronRight size={12} aria-hidden="true" />
+                </span>
+              )}
+            </nav>
+          </div>
+        )}
       </div>
 
       {/* ── Right panel ───────────────────────────────────────── */}

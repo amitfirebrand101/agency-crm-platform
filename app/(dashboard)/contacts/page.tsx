@@ -9,22 +9,23 @@ import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { ContactTable } from "./contact-table";
+import { Pagination } from "./pagination";
+
+export const dynamic = "force-dynamic";
 
 type ContactWithTags = Prisma.ContactGetPayload<{ include: { tags: { include: { tag: { select: { id: true; name: true; color: true } } } } } }>;
 
-const AVATAR_COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ec4899", "#06b6d4", "#6366f1"];
-function avatarBg(name: string): string {
-  return AVATAR_COLORS[(name.charCodeAt(0) || 0) % AVATAR_COLORS.length];
-}
+const PAGE_SIZE = 50;
 
 export default async function ContactsPage({
   searchParams
 }: {
-  searchParams?: Promise<{ q?: string; status?: string }>;
+  searchParams?: Promise<{ q?: string; status?: string; page?: string }>;
 }) {
   const params = await searchParams;
   const query = params?.q?.trim() ?? "";
   const statusFilter = params?.status ?? "";
+  const page = Math.max(1, parseInt(params?.page ?? "1", 10) || 1);
 
   const user = await requireUser();
   let databaseUnavailable = false;
@@ -32,6 +33,7 @@ export default async function ContactsPage({
   let tags: Awaited<ReturnType<typeof prisma.tag.findMany>> = [];
   let customFields: Awaited<ReturnType<typeof prisma.customField.findMany>> = [];
   let totalContacts = 0;
+  let filteredCount = 0;
   let leadsCount = 0;
   let customersCount = 0;
 
@@ -50,17 +52,21 @@ export default async function ContactsPage({
               { firstName: { contains: query, mode: "insensitive" } },
               { lastName: { contains: query, mode: "insensitive" } },
               { email: { contains: query, mode: "insensitive" } },
+              { phone: { contains: query, mode: "insensitive" } },
               { companyName: { contains: query, mode: "insensitive" } }
             ]
           }
         : {})
     };
 
-    [contacts, tags, customFields, totalContacts, leadsCount, customersCount] = await Promise.all([
+    const skip = (page - 1) * PAGE_SIZE;
+
+    [contacts, tags, customFields, totalContacts, filteredCount, leadsCount, customersCount] = await Promise.all([
       prisma.contact.findMany({
         where,
-        orderBy: { createdAt: "desc" },
-        take: 100,
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+        skip,
+        take: PAGE_SIZE + 1,
         include: { tags: { include: { tag: { select: { id: true, name: true, color: true } } } } }
       }),
       prisma.tag.findMany({
@@ -72,6 +78,7 @@ export default async function ContactsPage({
         orderBy: { name: "asc" }
       }),
       prisma.contact.count({ where: baseWhere }),
+      prisma.contact.count({ where }),
       prisma.contact.count({ where: { ...baseWhere, status: "LEAD" } }),
       prisma.contact.count({ where: { ...baseWhere, status: "CUSTOMER" } })
     ]);
@@ -79,6 +86,20 @@ export default async function ContactsPage({
     databaseUnavailable = true;
     console.error("Contacts page database query failed", error);
   }
+
+  // Determine if there's a next page (fetched PAGE_SIZE + 1 records)
+  const hasMore = contacts.length > PAGE_SIZE;
+  const pageContacts = hasMore ? contacts.slice(0, PAGE_SIZE) : contacts;
+  const totalPages = Math.max(1, Math.ceil(filteredCount / PAGE_SIZE));
+
+  // Range string for display
+  const rangeStart = filteredCount === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, filteredCount);
+
+  // Params forwarded to the pagination component (excludes `page`)
+  const filterParams: Record<string, string> = {};
+  if (query) filterParams.q = query;
+  if (statusFilter) filterParams.status = statusFilter;
 
   return (
     <div className="space-y-6">
@@ -116,7 +137,7 @@ export default async function ContactsPage({
                   <UserRound className="text-primary" size={18} />
                   <h2 className="font-semibold">Contact records</h2>
                   <span className="rounded bg-background px-2 py-0.5 text-xs font-semibold text-muted">
-                    {contacts.length}
+                    {filteredCount}
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
@@ -155,7 +176,7 @@ export default async function ContactsPage({
               </div>
             </CardHeader>
 
-            {contacts.length === 0 ? (
+            {pageContacts.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
                 <div className="mb-4 flex size-16 items-center justify-center rounded-full bg-background">
                   <UserRound className="text-muted" size={28} />
@@ -170,22 +191,39 @@ export default async function ContactsPage({
                 </p>
               </div>
             ) : (
-              <div className="px-0">
-                <ContactTable
-                  contacts={contacts.map((c) => ({
-                    id: c.id,
-                    firstName: c.firstName,
-                    lastName: c.lastName,
-                    email: c.email,
-                    phone: c.phone,
-                    companyName: c.companyName,
-                    status: c.status,
-                    createdAt: c.createdAt.toISOString(),
-                    tags: c.tags.map((ct) => ({ tag: ct.tag })),
-                  }))}
-                  tags={tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
-                />
-              </div>
+              <>
+                <div className="px-0">
+                  <ContactTable
+                    contacts={pageContacts.map((c) => ({
+                      id: c.id,
+                      firstName: c.firstName,
+                      lastName: c.lastName,
+                      email: c.email,
+                      phone: c.phone,
+                      companyName: c.companyName,
+                      status: c.status,
+                      createdAt: c.createdAt.toISOString(),
+                      tags: c.tags.map((ct) => ({ tag: ct.tag })),
+                    }))}
+                    tags={tags.map((t) => ({ id: t.id, name: t.name, color: t.color }))}
+                  />
+                </div>
+
+                {/* Pagination footer */}
+                <div className="flex flex-col gap-1 border-t border-border">
+                  {filteredCount > 0 && (
+                    <p className="px-4 pt-3 text-xs text-muted text-center">
+                      Showing {rangeStart}–{rangeEnd} of {filteredCount} contact{filteredCount !== 1 ? "s" : ""}
+                    </p>
+                  )}
+                  <Pagination
+                    page={page}
+                    totalPages={totalPages}
+                    basePath="/contacts"
+                    params={filterParams}
+                  />
+                </div>
+              </>
             )}
           </Card>
         </div>

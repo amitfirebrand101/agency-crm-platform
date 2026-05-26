@@ -4,18 +4,22 @@ import {
   ArrowLeft,
   CalendarDays,
   Mail,
+  MapPin,
   MessageSquare,
   MessageSquareText,
   Phone,
+  StickyNote,
   Tag,
   Target,
   Trash2
 } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import {
+  addContactNote,
   assignTagToContact,
   deleteContact,
   removeTagFromContact,
+  startSmsConversation,
   updateContact
 } from "@/app/(dashboard)/contacts/actions";
 import { Badge, statusVariant } from "@/components/ui/badge";
@@ -36,6 +40,22 @@ type ContactDetail = Prisma.ContactGetPayload<{
   };
 }>;
 
+type InternalNote = Prisma.ConversationGetPayload<{
+  include: { messages: { orderBy: { createdAt: "asc" } } };
+}>;
+
+function relTime(date: Date): string {
+  const diff = Date.now() - date.getTime();
+  const m = Math.floor(diff / 60_000);
+  const h = Math.floor(diff / 3_600_000);
+  const days = Math.floor(diff / 86_400_000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  if (h < 24) return `${h}h ago`;
+  if (days < 7) return `${days}d ago`;
+  return date.toLocaleDateString();
+}
+
 const AVATAR_COLORS = ["#3b82f6", "#10b981", "#8b5cf6", "#f59e0b", "#ec4899", "#06b6d4", "#6366f1"];
 function avatarBg(name: string): string {
   return AVATAR_COLORS[(name.charCodeAt(0) || 0) % AVATAR_COLORS.length];
@@ -47,6 +67,7 @@ export default async function ContactDetailPage({ params }: Props) {
 
   let contact: ContactDetail | null = null;
   let tags: Awaited<ReturnType<typeof prisma.tag.findMany>> = [];
+  let internalNotes: InternalNote[] = [];
 
   try {
     [contact, tags] = await Promise.all([
@@ -70,6 +91,24 @@ export default async function ContactDetailPage({ params }: Props) {
     ]);
   } catch (error) {
     console.error("Contact detail page database query failed", error);
+  }
+
+  if (contact) {
+    try {
+      internalNotes = await prisma.conversation.findMany({
+        where: {
+          contactId: contact.id,
+          channel: "INTERNAL_NOTE",
+          agencyId: user.agencyId,
+          subAccountId: user.subAccountId ?? undefined,
+        },
+        include: { messages: { orderBy: { createdAt: "asc" } } },
+        orderBy: { createdAt: "desc" },
+        take: 20,
+      });
+    } catch (error) {
+      console.error("Contact detail page notes query failed", error);
+    }
   }
 
   if (!contact) notFound();
@@ -189,14 +228,17 @@ export default async function ContactDetailPage({ params }: Props) {
                 </a>
               ) : null}
               {contact.phone ? (
-                <a
-                  className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium transition hover:bg-background"
-                  href={`tel:${contact.phone}`}
-                  title={`SMS ${fullName}`}
-                >
-                  <MessageSquare size={15} />
-                  SMS
-                </a>
+                <form action={startSmsConversation}>
+                  <input name="contactId" type="hidden" value={contact.id} />
+                  <SubmitButton
+                    className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-2 text-sm font-medium transition hover:bg-background"
+                    title={`SMS ${fullName}`}
+                    pendingText="Opening…"
+                  >
+                    <MessageSquare size={15} />
+                    SMS
+                  </SubmitButton>
+                </form>
               ) : null}
             </div>
           </div>
@@ -344,6 +386,61 @@ export default async function ContactDetailPage({ params }: Props) {
             </CardBody>
           </Card>
 
+          {/* Internal notes */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <StickyNote className="text-amber-500" size={16} />
+                <h2 className="font-semibold">Notes</h2>
+              </div>
+            </CardHeader>
+            <CardBody>
+              {/* Existing notes */}
+              {internalNotes.length === 0 ? (
+                <p className="mb-4 text-sm text-muted">No notes yet. Add one below.</p>
+              ) : (
+                <div className="mb-4 max-h-72 space-y-2 overflow-y-auto pr-1">
+                  {internalNotes.map((note) => {
+                    const body = note.messages[0]?.body ?? "";
+                    const date = new Date(note.createdAt);
+                    return (
+                      <div
+                        className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm"
+                        key={note.id}
+                      >
+                        <p className="whitespace-pre-wrap text-amber-900">{body}</p>
+                        <p className="mt-1.5 text-right text-xs text-amber-600/70">{relTime(date)}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Add note form */}
+              <form action={addContactNote} className="space-y-2">
+                <input name="contactId" type="hidden" value={contact.id} />
+                <label className="block">
+                  <span className="sr-only">Note text</span>
+                  <textarea
+                    aria-label="Note text"
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none ring-primary/20 focus:ring-4"
+                    maxLength={2000}
+                    name="body"
+                    placeholder="Add an internal note… (max 2000 chars)"
+                    required
+                    rows={3}
+                  />
+                </label>
+                <SubmitButton
+                  className="w-full rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800 transition hover:bg-amber-100"
+                  pendingText="Saving…"
+                >
+                  Add note
+                </SubmitButton>
+              </form>
+            </CardBody>
+          </Card>
+
           {/* Contact stats */}
           <Card>
             <CardHeader>
@@ -383,6 +480,25 @@ export default async function ContactDetailPage({ params }: Props) {
                   <dt className="text-muted">Opt-out SMS</dt>
                   <dd className="font-semibold">{contact.smsOptOut ? "Yes" : "No"}</dd>
                 </div>
+                {(contact.addressLine1 ?? contact.city ?? contact.region ?? contact.country ?? contact.postalCode) ? (
+                  <div className="py-2.5">
+                    <dt className="mb-1 flex items-center gap-1.5 text-muted">
+                      <MapPin size={12} className="shrink-0" />
+                      Address
+                    </dt>
+                    <dd className="font-semibold leading-snug">
+                      {[
+                        contact.addressLine1,
+                        [contact.city, contact.region].filter(Boolean).join(", "),
+                        [contact.postalCode, contact.country].filter(Boolean).join(" "),
+                      ]
+                        .filter(Boolean)
+                        .map((line, i) => (
+                          <span className="block" key={i}>{line}</span>
+                        ))}
+                    </dd>
+                  </div>
+                ) : null}
               </dl>
             </CardBody>
           </Card>

@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { z } from "zod";
 import { canWriteSubAccount, requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -259,4 +260,63 @@ export async function createPhoneNumber(formData: FormData) {
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "PhoneNumber", entityId: phoneNumber.id });
   revalidatePath("/calling");
   revalidatePath("/sms");
+}
+
+export async function updateOpportunity(formData: FormData) {
+  const user = await requireWritableSubAccount();
+  const input = z
+    .object({
+      opportunityId: z.string().uuid(),
+      name: z.string().trim().min(1).max(200),
+      value: z.coerce.number().min(0).default(0),
+      status: z.enum(["OPEN", "WON", "LOST"]),
+    })
+    .parse(Object.fromEntries(formData));
+
+  const opp = await prisma.opportunity.findFirstOrThrow({
+    where: { id: input.opportunityId, agencyId: user.agencyId, subAccountId: user.subAccountId },
+  });
+
+  await prisma.opportunity.update({
+    where: { id: opp.id },
+    data: {
+      name: input.name,
+      valueCents: Math.round(input.value * 100),
+      status: input.status,
+    },
+  });
+
+  await auditLog({
+    agencyId: user.agencyId,
+    actorUserId: user.id,
+    action: "UPDATE",
+    entityType: "Opportunity",
+    entityId: opp.id,
+    metadata: { name: input.name, status: input.status, valueCents: Math.round(input.value * 100) },
+  });
+
+  revalidatePath("/opportunities");
+  revalidatePath(`/opportunities/${opp.id}`);
+}
+
+export async function deleteOpportunity(formData: FormData) {
+  const user = await requireWritableSubAccount();
+  const opportunityId = z.string().uuid().parse(String(formData.get("opportunityId") ?? ""));
+
+  const opp = await prisma.opportunity.findFirstOrThrow({
+    where: { id: opportunityId, agencyId: user.agencyId, subAccountId: user.subAccountId },
+  });
+
+  await prisma.opportunity.delete({ where: { id: opp.id } });
+
+  await auditLog({
+    agencyId: user.agencyId,
+    actorUserId: user.id,
+    action: "DELETE",
+    entityType: "Opportunity",
+    entityId: opp.id,
+  });
+
+  revalidatePath("/opportunities");
+  redirect("/opportunities");
 }

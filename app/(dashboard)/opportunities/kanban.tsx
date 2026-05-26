@@ -137,7 +137,12 @@ function DraggableCard({
           <GripVertical size={14} />
         </div>
         <div className="flex-1 min-w-0">
-          <div className="font-semibold text-sm leading-snug">{opp.name}</div>
+          <Link
+            href={`/opportunities/${opp.id}`}
+            className="block font-semibold text-sm leading-snug hover:text-primary transition-colors"
+          >
+            {opp.name}
+          </Link>
         </div>
         <Badge variant={statusVariant(opp.status)} className="shrink-0 text-[10px]">
           {opp.status}
