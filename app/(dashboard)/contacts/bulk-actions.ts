@@ -5,6 +5,7 @@ import { z } from "zod";
 import { canWriteSubAccount, requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { auditLog } from "@/lib/security";
+import { runAutomationsForEvent } from "@/lib/automations/executor";
 
 const idsSchema = z.array(z.string().uuid()).min(1).max(500);
 
@@ -40,6 +41,20 @@ export async function bulkAddTag(formData: FormData): Promise<{ ok: boolean; err
     });
 
     await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "UPDATE", entityType: "Contact", metadata: { bulkAction: "addTag", tagId, count: ids.length } });
+
+    // Fire automation trigger for each contact
+    await Promise.all(
+      ids.map((contactId) =>
+        runAutomationsForEvent({
+          type: "CONTACT_TAG",
+          agencyId: user.agencyId,
+          subAccountId: user.subAccountId,
+          contactId,
+          payload: { tagName: tag.name },
+        })
+      )
+    );
+
     revalidatePath("/contacts");
     return { ok: true };
   } catch (err) {
@@ -54,8 +69,25 @@ export async function bulkRemoveTag(formData: FormData): Promise<{ ok: boolean; 
     const tagId = z.string().uuid().parse(String(formData.get("tagId") ?? ""));
     await verifyContactsOwnership(user, ids);
 
+    const tag = await prisma.tag.findFirstOrThrow({
+      where: { id: tagId, agencyId: user.agencyId },
+    });
+
     await prisma.contactTag.deleteMany({ where: { contactId: { in: ids }, tagId } });
     await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "UPDATE", entityType: "Contact", metadata: { bulkAction: "removeTag", tagId, count: ids.length } });
+
+    await Promise.all(
+      ids.map((contactId) =>
+        runAutomationsForEvent({
+          type: "CONTACT_TAG_REMOVED",
+          agencyId: user.agencyId,
+          subAccountId: user.subAccountId,
+          contactId,
+          payload: { tagName: tag.name },
+        })
+      )
+    );
+
     revalidatePath("/contacts");
     return { ok: true };
   } catch (err) {
