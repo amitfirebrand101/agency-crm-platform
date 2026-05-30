@@ -7,9 +7,9 @@ export function Card({ className, ...props }: CardProps) {
 }
 
 export function CardHeader({ className, ...props }: CardProps) {
-  return <div className={cn("border-b border-border p-4", className)} {...props} />;
+  return <div className={cn("border-b border-border px-5 py-4", className)} {...props} />;
 }
 
 export function CardBody({ className, ...props }: CardProps) {
-  return <div className={cn("p-4", className)} {...props} />;
+  return <div className={cn("px-5 py-4", className)} {...props} />;
 }

@@ -3,14 +3,25 @@
 @tailwind utilities;
 
 :root {
-  --background: 210 20% 98%;
-  --foreground: 222 37% 12%;
-  --muted: 215 18% 45%;
+  /* Content area */
+  --background: 220 14% 96%;
+  --foreground: 224 47% 11%;
+  --muted: 215 16% 52%;
   --panel: 0 0% 100%;
-  --border: 214 18% 88%;
-  --primary: 197 88% 29%;
-  --accent: 352 71% 56%;
-  --positive: 151 57% 34%;
+  --border: 214 24% 90%;
+  --primary: 231 68% 59%;
+  --accent: 262 75% 61%;
+  --positive: 142 72% 29%;
+
+  /* Sidebar */
+  --sidebar-bg: 224 32% 15%;
+  --sidebar-hover: 224 28% 20%;
+  --sidebar-active: 224 28% 22%;
+  --sidebar-border: 224 24% 22%;
+  --sidebar-text: 215 18% 62%;
+  --sidebar-text-active: 0 0% 100%;
+  --sidebar-heading: 215 14% 40%;
+  --sidebar-accent: 231 68% 59%;
 }
 
 * {
