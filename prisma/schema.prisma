@@ -237,6 +237,8 @@ model Contact {
   conversations  Conversation[]
   appointments   Appointment[]
   tasks          ContactTask[]
+  invoices       Invoice[]
+  reviewRequests ReviewRequest[]
 
   @@index([agencyId, subAccountId])
   @@index([subAccountId, email])
@@ -954,6 +956,301 @@ model CalendarQuestion {
   calendar   Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
 
   @@index([calendarId])
+}
+
+// Products catalog
+model Product {
+  id           String   @id @default(uuid()) @db.Uuid
+  agencyId     String   @db.Uuid
+  subAccountId String   @db.Uuid
+  name         String
+  description  String?
+  priceCents   Int      @default(0)
+  currency     String   @default("USD")
+  type         String   @default("service")
+  status       String   @default("active")
+  imageUrl     String?
+  taxable      Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([agencyId, subAccountId])
+}
+
+model Invoice {
+  id            String        @id @default(uuid()) @db.Uuid
+  agencyId      String        @db.Uuid
+  subAccountId  String        @db.Uuid
+  contactId     String?       @db.Uuid
+  number        String
+  status        String        @default("draft")
+  currency      String        @default("USD")
+  subtotalCents Int           @default(0)
+  taxCents      Int           @default(0)
+  discountCents Int           @default(0)
+  totalCents    Int           @default(0)
+  paidCents     Int           @default(0)
+  notes         String?
+  terms         String?
+  title         String        @default("Invoice")
+  dueDate       DateTime?
+  sentAt        DateTime?
+  paidAt        DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  contact       Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  items         InvoiceItem[]
+
+  @@index([agencyId, subAccountId])
+  @@index([contactId])
+}
+
+model InvoiceItem {
+  id             String   @id @default(uuid()) @db.Uuid
+  invoiceId      String   @db.Uuid
+  productId      String?  @db.Uuid
+  name           String
+  description    String?
+  quantity       Decimal  @default(1) @db.Decimal(10, 2)
+  unitPriceCents Int      @default(0)
+  totalCents     Int      @default(0)
+  taxRate        Decimal  @default(0) @db.Decimal(5, 2)
+  createdAt      DateTime @default(now())
+  invoice        Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+}
+
+// SMS/Email mass broadcasts
+model Broadcast {
+  id             String   @id @default(uuid()) @db.Uuid
+  agencyId       String   @db.Uuid
+  subAccountId   String   @db.Uuid
+  name           String
+  channel        String
+  status         String   @default("draft")
+  subject        String?
+  body           String   @default("")
+  segmentFilters Json     @default("{}")
+  recipientCount Int      @default(0)
+  sentCount      Int      @default(0)
+  deliveredCount Int      @default(0)
+  failedCount    Int      @default(0)
+  scheduledAt    DateTime?
+  startedAt      DateTime?
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([agencyId, subAccountId])
+}
+
+// Reputation management — send review request to contacts
+model ReviewRequest {
+  id           String   @id @default(uuid()) @db.Uuid
+  agencyId     String   @db.Uuid
+  subAccountId String   @db.Uuid
+  contactId    String   @db.Uuid
+  channel      String   @default("SMS")
+  status       String   @default("pending")
+  platform     String   @default("google")
+  reviewUrl    String?
+  sentAt       DateTime?
+  clickedAt    DateTime?
+  createdAt    DateTime @default(now())
+  contact      Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId, subAccountId])
+  @@index([contactId])
+}
+
+// Social media planner
+model SocialPost {
+  id           String    @id @default(uuid()) @db.Uuid
+  agencyId     String    @db.Uuid
+  subAccountId String    @db.Uuid
+  content      String
+  platforms    String[]  @default([])
+  status       String    @default("draft")
+  scheduledAt  DateTime?
+  publishedAt  DateTime?
+  mediaUrls    String[]  @default([])
+  error        String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([agencyId, subAccountId])
+  @@index([scheduledAt, status])
+}
+
+// Trigger links — trackable redirect URLs
+model TriggerLink {
+  id           String             @id @default(uuid()) @db.Uuid
+  agencyId     String             @db.Uuid
+  subAccountId String             @db.Uuid
+  name         String
+  slug         String
+  redirectUrl  String
+  clickCount   Int                @default(0)
+  automationId String?            @db.Uuid
+  createdAt    DateTime           @default(now())
+  clicks       TriggerLinkClick[]
+
+  @@unique([subAccountId, slug])
+  @@index([agencyId, subAccountId])
+}
+
+model TriggerLinkClick {
+  id            String      @id @default(uuid()) @db.Uuid
+  triggerLinkId String      @db.Uuid
+  contactId     String?     @db.Uuid
+  ipAddress     String?
+  userAgent     String?
+  createdAt     DateTime    @default(now())
+  triggerLink   TriggerLink @relation(fields: [triggerLinkId], references: [id], onDelete: Cascade)
+
+  @@index([triggerLinkId])
+}
+
+// Course builder
+model Course {
+  id           String          @id @default(uuid()) @db.Uuid
+  agencyId     String          @db.Uuid
+  subAccountId String          @db.Uuid
+  title        String
+  description  String?
+  status       String          @default("draft")
+  thumbnailUrl String?
+  priceCents   Int             @default(0)
+  isFree       Boolean         @default(true)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  sections     CourseSection[]
+
+  @@index([agencyId, subAccountId])
+}
+
+model CourseSection {
+  id        String         @id @default(uuid()) @db.Uuid
+  courseId  String         @db.Uuid
+  title     String
+  position  Int            @default(0)
+  createdAt DateTime       @default(now())
+  course    Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons   CourseLesson[]
+
+  @@index([courseId])
+}
+
+model CourseLesson {
+  id          String        @id @default(uuid()) @db.Uuid
+  sectionId   String        @db.Uuid
+  courseId    String        @db.Uuid
+  title       String
+  description String?
+  type        String        @default("video")
+  content     Json          @default("{}")
+  duration    Int?
+  position    Int           @default(0)
+  isFree      Boolean       @default(false)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  section     CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@index([sectionId])
+  @@index([courseId])
+}
+
+// API key management
+model ApiKey {
+  id           String    @id @default(uuid()) @db.Uuid
+  agencyId     String    @db.Uuid
+  subAccountId String?   @db.Uuid
+  userId       String    @db.Uuid
+  name         String
+  keyHash      String    @unique
+  keyPrefix    String
+  scopes       String[]  @default([])
+  lastUsedAt   DateTime?
+  expiresAt    DateTime?
+  revokedAt    DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([agencyId])
+}
+
+// Outbound webhook endpoints
+model WebhookEndpoint {
+  id              String    @id @default(uuid()) @db.Uuid
+  agencyId        String    @db.Uuid
+  subAccountId    String    @db.Uuid
+  name            String
+  url             String
+  events          String[]  @default([])
+  secret          String
+  enabled         Boolean   @default(true)
+  successCount    Int       @default(0)
+  failureCount    Int       @default(0)
+  lastTriggeredAt DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([agencyId, subAccountId])
+}
+
+// Custom merge field values (e.g. {{business.name}})
+model CustomValue {
+  id           String   @id @default(uuid()) @db.Uuid
+  agencyId     String   @db.Uuid
+  subAccountId String?  @db.Uuid
+  name         String
+  key          String
+  value        String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([agencyId, subAccountId, key])
+}
+
+// Media library
+model MediaFile {
+  id           String   @id @default(uuid()) @db.Uuid
+  agencyId     String   @db.Uuid
+  subAccountId String?  @db.Uuid
+  name         String
+  url          String
+  mimeType     String   @default("application/octet-stream")
+  sizeBytes    BigInt   @default(0)
+  folder       String?
+  altText      String?
+  createdAt    DateTime @default(now())
+
+  @@index([agencyId, subAccountId])
+}
+
+// Business profile / location info
+model BusinessProfile {
+  id              String   @id @default(uuid()) @db.Uuid
+  agencyId        String   @db.Uuid
+  subAccountId    String   @unique @db.Uuid
+  businessName    String?
+  address         String?
+  city            String?
+  state           String?
+  zip             String?
+  country         String?  @default("US")
+  timezone        String?  @default("America/New_York")
+  businessHours   Json     @default("{}")
+  googleReviewUrl String?
+  yelpUrl         String?
+  facebookUrl     String?
+  website         String?
+  logoUrl         String?
+  primaryColor    String?  @default("#4361ee")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([agencyId])
 }
 
 // In-app notification bell entries

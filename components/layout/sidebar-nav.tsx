@@ -4,23 +4,33 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Bot,
+  BookOpen,
   Building2,
   CalendarDays,
   ContactRound,
+  FileText,
   GalleryVerticalEnd,
+  Globe,
+  Image,
   LayoutDashboard,
+  Link2,
   Megaphone,
   MessageSquareText,
+  Package,
   PhoneCall,
+  Radio,
+  Receipt,
   Settings,
+  Share2,
+  Star,
   Target,
+  Webhook,
+  Wrench,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-import type { Route } from "next";
-
 type NavItem = {
-  href: Route;
+  href: string;
   label: string;
   icon: React.ComponentType<{ size?: number; className?: string }>;
 };
@@ -42,27 +52,56 @@ const navGroups: NavGroup[] = [
       { href: "/contacts", label: "Contacts", icon: ContactRound },
       { href: "/conversations", label: "Conversations", icon: MessageSquareText },
       { href: "/calendars", label: "Calendars", icon: CalendarDays },
-      { href: "/opportunities", label: "Opportunities", icon: Target },
+      { href: "/opportunities", label: "Pipelines", icon: Target },
     ],
   },
   {
     label: "Marketing",
     items: [
       { href: "/marketing", label: "Campaigns", icon: Megaphone },
+      { href: "/broadcasts", label: "Broadcasts", icon: Radio },
       { href: "/sms", label: "SMS", icon: MessageSquareText },
       { href: "/calling", label: "Calling", icon: PhoneCall },
+      { href: "/social", label: "Social Planner", icon: Share2 },
     ],
   },
   {
     label: "Automation",
     items: [
       { href: "/automations", label: "Workflows", icon: Bot },
+      { href: "/triggers", label: "Trigger Links", icon: Link2 },
     ],
   },
   {
-    label: "Sites",
+    label: "Payments",
     items: [
-      { href: "/sites", label: "Sites", icon: GalleryVerticalEnd },
+      { href: "/products", label: "Products", icon: Package },
+      { href: "/invoices", label: "Invoices", icon: Receipt },
+    ],
+  },
+  {
+    label: "Reputation",
+    items: [
+      { href: "/reputation", label: "Reviews", icon: Star },
+    ],
+  },
+  {
+    label: "Content",
+    items: [
+      { href: "/sites", label: "Sites & Funnels", icon: GalleryVerticalEnd },
+      { href: "/forms", label: "Forms", icon: FileText },
+      { href: "/surveys", label: "Surveys", icon: FileText },
+      { href: "/blog", label: "Blog", icon: Globe },
+      { href: "/courses", label: "Courses", icon: BookOpen },
+      { href: "/media", label: "Media Library", icon: Image },
+    ],
+  },
+  {
+    label: "Developer",
+    items: [
+      { href: "/api-keys", label: "API Keys", icon: Wrench },
+      { href: "/webhooks", label: "Webhooks", icon: Webhook },
+      { href: "/custom-values", label: "Custom Values", icon: Settings },
     ],
   },
   {
@@ -95,7 +134,7 @@ export function SidebarNav() {
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={item.href as never}
                   className={cn(
                     "group flex items-center gap-3 rounded-md px-3 py-2 text-[13px] font-medium transition-colors",
                     active
