@@ -3,10 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  BarChart3,
+  Bell,
   Bot,
   BookOpen,
   Building2,
   CalendarDays,
+  CheckSquare,
   ContactRound,
   FileText,
   GalleryVerticalEnd,
@@ -53,6 +56,7 @@ const navGroups: NavGroup[] = [
       { href: "/conversations", label: "Conversations", icon: MessageSquareText },
       { href: "/calendars", label: "Calendars", icon: CalendarDays },
       { href: "/opportunities", label: "Pipelines", icon: Target },
+      { href: "/tasks", label: "Tasks", icon: CheckSquare },
     ],
   },
   {
@@ -105,10 +109,18 @@ const navGroups: NavGroup[] = [
     ],
   },
   {
+    label: "Insights",
+    items: [
+      { href: "/reporting", label: "Reporting", icon: BarChart3 },
+      { href: "/notifications", label: "Notifications", icon: Bell },
+    ],
+  },
+  {
     label: "Admin",
     items: [
       { href: "/sub-accounts", label: "Sub Accounts", icon: Building2 },
       { href: "/settings", label: "Settings", icon: Settings },
+      { href: "/settings/business-profile", label: "Business Profile", icon: Building2 },
     ],
   },
 ];
