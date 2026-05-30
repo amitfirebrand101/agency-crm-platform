@@ -402,6 +402,7 @@ model Message {
   twilioSid      String?      @unique
   smtpMessageId  String?
   status         String       @default("queued")
+  error          String?
   createdAt      DateTime     @default(now())
   conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 

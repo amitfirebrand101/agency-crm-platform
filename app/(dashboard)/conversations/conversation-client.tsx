@@ -49,6 +49,8 @@ type Message = {
   id: string;
   body: string;
   direction: string;
+  status: string;
+  error: string | null;
   createdAt: string;
 };
 
@@ -160,12 +162,14 @@ export function ConversationClient({ conversation, cannedResponses, sendMessageA
         ) : (
           filteredMessages.map((m) => (
             <div
-              className={`flex ${m.direction === "outbound" ? "justify-end" : "justify-start"}`}
+              className={`flex flex-col ${m.direction === "outbound" ? "items-end" : "items-start"}`}
               key={m.id}
             >
               <div
                 className={`max-w-[72%] rounded-2xl px-4 py-2.5 text-sm ${
-                  m.direction === "outbound"
+                  m.status === "failed"
+                    ? "rounded-br-sm border border-red-200 bg-red-50 text-red-900 opacity-80"
+                    : m.direction === "outbound"
                     ? "rounded-br-sm bg-primary text-white"
                     : m.direction === "inbound"
                     ? "rounded-bl-sm border border-border bg-background"
@@ -177,7 +181,11 @@ export function ConversationClient({ conversation, cannedResponses, sendMessageA
                 </p>
                 <p
                   className={`mt-1 text-[10px] ${
-                    m.direction === "outbound" ? "text-white/60" : "text-muted"
+                    m.status === "failed"
+                      ? "text-red-400"
+                      : m.direction === "outbound"
+                      ? "text-white/60"
+                      : "text-muted"
                   }`}
                 >
                   {new Date(m.createdAt).toLocaleString([], {
@@ -188,6 +196,17 @@ export function ConversationClient({ conversation, cannedResponses, sendMessageA
                   })}
                 </p>
               </div>
+              {m.status === "failed" && (
+                <div
+                  className="mt-0.5 flex items-center gap-1 text-[11px] text-red-500 cursor-default"
+                  title={m.error ?? "Delivery failed"}
+                >
+                  <svg width="11" height="11" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3.5a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4.5zm0 7a.875.875 0 1 1 0-1.75.875.875 0 0 1 0 1.75z"/>
+                  </svg>
+                  Not delivered · {m.error ? m.error.slice(0, 60) + (m.error.length > 60 ? "…" : "") : "Delivery failed"}
+                </div>
+              )}
             </div>
           ))
         )}

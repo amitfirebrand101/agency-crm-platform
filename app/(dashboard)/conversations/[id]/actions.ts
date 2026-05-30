@@ -27,41 +27,49 @@ export async function sendMessage(formData: FormData) {
 
   let twilioSid: string | null = null;
   let smtpMessageId: string | null = null;
+  let deliveryError: string | null = null;
 
-  // Route outbound messages to real providers
+  // Attempt real provider delivery for outbound messages — never throw;
+  // on failure we save the message with status "failed" so it appears in thread.
   if (input.direction === "outbound") {
     if (conversation.channel === "SMS") {
       if (!twilioConfigured()) {
-        throw new Error(
-          "SMS provider not configured. Add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER to your environment."
-        );
-      }
-      const toPhone = conversation.contact?.phone;
-      if (!toPhone) throw new Error("Contact has no phone number for SMS delivery.");
-      try {
-        twilioSid = await sendSms(toPhone, input.body);
-      } catch (err) {
-        throw new Error(`SMS delivery failed: ${err instanceof Error ? err.message : String(err)}`);
+        deliveryError = "SMS not configured — add TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, and TWILIO_FROM_NUMBER.";
+      } else {
+        const toPhone = conversation.contact?.phone;
+        if (!toPhone) {
+          deliveryError = "Contact has no phone number for SMS delivery.";
+        } else {
+          try {
+            twilioSid = await sendSms(toPhone, input.body);
+          } catch (err) {
+            deliveryError = err instanceof Error ? err.message : String(err);
+          }
+        }
       }
     } else if (conversation.channel === "EMAIL") {
       if (!emailConfigured()) {
-        throw new Error(
-          "Email provider not configured. Add SMTP_HOST, SMTP_USER, and SMTP_PASS to your environment."
-        );
-      }
-      const toEmail = conversation.contact?.email;
-      if (!toEmail) throw new Error("Contact has no email address for email delivery.");
-      try {
-        smtpMessageId = await sendEmail({
-          to: toEmail,
-          subject: conversation.subject ?? "(no subject)",
-          text: input.body,
-        });
-      } catch (err) {
-        throw new Error(`Email delivery failed: ${err instanceof Error ? err.message : String(err)}`);
+        deliveryError = "Email not configured — add SMTP_HOST, SMTP_USER, and SMTP_PASS.";
+      } else {
+        const toEmail = conversation.contact?.email;
+        if (!toEmail) {
+          deliveryError = "Contact has no email address for delivery.";
+        } else {
+          try {
+            smtpMessageId = await sendEmail({
+              to: toEmail,
+              subject: conversation.subject ?? "(no subject)",
+              text: input.body,
+            });
+          } catch (err) {
+            deliveryError = err instanceof Error ? err.message : String(err);
+          }
+        }
       }
     }
   }
+
+  const delivered = !deliveryError && (conversation.channel === "SMS" ? !!twilioSid : !!smtpMessageId);
 
   await prisma.message.create({
     data: {
@@ -70,10 +78,11 @@ export async function sendMessage(formData: FormData) {
       direction: input.direction,
       twilioSid,
       smtpMessageId,
+      status: deliveryError ? "failed" : delivered ? "sent" : "queued",
+      error: deliveryError,
     },
   });
 
-  // Update conversation updatedAt and status back to OPEN if it was CLOSED
   await prisma.conversation.update({
     where: { id: conversation.id },
     data: { updatedAt: new Date(), ...(conversation.status === "CLOSED" ? { status: "OPEN" } : {}) },

@@ -600,6 +600,8 @@ export default async function ConversationsPage({
                   id: m.id,
                   body: m.body,
                   direction: m.direction,
+                  status: m.status,
+                  error: m.error ?? null,
                   createdAt: m.createdAt.toISOString(),
                 })),
               }}
