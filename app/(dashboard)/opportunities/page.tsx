@@ -1,4 +1,5 @@
-import { Plus, Target, TrendingUp, TrendingDown, DollarSign, Percent } from "lucide-react";
+import Link from "next/link";
+import { Plus, Settings, Target, TrendingUp, TrendingDown, DollarSign, Percent } from "lucide-react";
 import type { Prisma } from "@prisma/client";
 import { createOpportunity, createPipeline } from "@/app/(dashboard)/module-actions";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
@@ -67,11 +68,20 @@ export default async function OpportunitiesPage({
   return (
     <div className="space-y-6">
       {/* Page header */}
-      <div>
-        <h1 className="text-2xl font-semibold">Opportunities</h1>
-        <p className="mt-1 text-sm text-muted">
-          Pipelines, stages, and deal tracking for your agency sales workflows.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">Opportunities</h1>
+          <p className="mt-1 text-sm text-muted">
+            Pipelines, stages, and deal tracking for your agency sales workflows.
+          </p>
+        </div>
+        <Link
+          href="/opportunities/stages"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-sm text-muted transition hover:text-foreground"
+        >
+          <Settings size={14} />
+          Manage stages
+        </Link>
       </div>
 
       {databaseUnavailable ? <DbWarning /> : null}

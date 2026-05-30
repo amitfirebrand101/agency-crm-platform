@@ -364,3 +364,78 @@ export async function deleteOpportunity(formData: FormData) {
   revalidatePath("/opportunities");
   redirect("/opportunities");
 }
+
+export async function addPipelineStage(formData: FormData) {
+  const user = await requireWritableSubAccount();
+  const pipelineId = z.string().uuid().parse(String(formData.get("pipelineId") ?? ""));
+  const name = z.string().trim().min(1).max(80).parse(String(formData.get("name") ?? ""));
+
+  // Verify pipeline belongs to this sub-account
+  await prisma.pipeline.findFirstOrThrow({
+    where: { id: pipelineId, agencyId: user.agencyId, subAccountId: user.subAccountId },
+  });
+
+  // Get max position
+  const maxPos = await prisma.pipelineStage.aggregate({
+    where: { pipelineId },
+    _max: { position: true },
+  });
+  const position = (maxPos._max.position ?? 0) + 1;
+
+  await prisma.pipelineStage.create({ data: { pipelineId, name, position } });
+  await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "PipelineStage", entityId: pipelineId });
+  revalidatePath("/opportunities");
+  revalidatePath("/opportunities/stages");
+}
+
+export async function renamePipelineStage(formData: FormData) {
+  const user = await requireWritableSubAccount();
+  const stageId = z.string().uuid().parse(String(formData.get("stageId") ?? ""));
+  const name = z.string().trim().min(1).max(80).parse(String(formData.get("name") ?? ""));
+
+  const stage = await prisma.pipelineStage.findFirstOrThrow({
+    where: { id: stageId },
+    include: { pipeline: true },
+  });
+  if (stage.pipeline.agencyId !== user.agencyId || stage.pipeline.subAccountId !== user.subAccountId) {
+    throw new Error("Access denied.");
+  }
+
+  await prisma.pipelineStage.update({ where: { id: stageId }, data: { name } });
+  revalidatePath("/opportunities");
+  revalidatePath("/opportunities/stages");
+}
+
+export async function deletePipelineStage(formData: FormData) {
+  const user = await requireWritableSubAccount();
+  const stageId = z.string().uuid().parse(String(formData.get("stageId") ?? ""));
+
+  const stage = await prisma.pipelineStage.findFirstOrThrow({
+    where: { id: stageId },
+    include: { pipeline: true, _count: { select: { opportunities: true } } },
+  });
+  if (stage.pipeline.agencyId !== user.agencyId || stage.pipeline.subAccountId !== user.subAccountId) {
+    throw new Error("Access denied.");
+  }
+  if (stage._count.opportunities > 0) {
+    throw new Error(`Cannot delete a stage with ${stage._count.opportunities} opportunities. Move them first.`);
+  }
+
+  await prisma.pipelineStage.delete({ where: { id: stageId } });
+  await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "DELETE", entityType: "PipelineStage", entityId: stageId });
+  revalidatePath("/opportunities");
+  revalidatePath("/opportunities/stages");
+}
+
+export async function renamePipeline(formData: FormData) {
+  const user = await requireWritableSubAccount();
+  const pipelineId = z.string().uuid().parse(String(formData.get("pipelineId") ?? ""));
+  const name = z.string().trim().min(2).max(120).parse(String(formData.get("name") ?? ""));
+
+  await prisma.pipeline.findFirstOrThrow({
+    where: { id: pipelineId, agencyId: user.agencyId, subAccountId: user.subAccountId },
+  });
+  await prisma.pipeline.update({ where: { id: pipelineId }, data: { name } });
+  revalidatePath("/opportunities");
+  revalidatePath("/opportunities/stages");
+}
