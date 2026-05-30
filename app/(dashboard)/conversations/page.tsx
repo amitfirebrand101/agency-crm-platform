@@ -122,6 +122,7 @@ export default async function ConversationsPage({
   let active: ConversationDetail | null = null;
   let subAccountMembers: Array<{ userId: string; user: { id: string; name: string | null; email: string } }> = [];
   let cannedResponses: Array<{ id: string; name: string; body: string }> = [];
+  let contactsForPicker: Array<{ id: string; firstName: string; lastName: string | null; phone: string | null; email: string | null }> = [];
 
   try {
     const where: Prisma.ConversationWhereInput = {
@@ -134,7 +135,7 @@ export default async function ConversationsPage({
 
     const skip = (cpage - 1) * CONV_PAGE_SIZE;
 
-    const [fetched, count, unread, members, canned] = await Promise.all([
+    const [fetched, count, unread, members, canned, contacts] = await Promise.all([
       prisma.conversation.findMany({
         where,
         orderBy: { updatedAt: "desc" },
@@ -164,6 +165,12 @@ export default async function ConversationsPage({
             select: { id: true, name: true, body: true },
           })
         : Promise.resolve([]),
+      prisma.contact.findMany({
+        where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
+        orderBy: { firstName: "asc" },
+        take: 200,
+        select: { id: true, firstName: true, lastName: true, phone: true, email: true },
+      }),
     ]);
 
     totalConversations = count;
@@ -171,6 +178,7 @@ export default async function ConversationsPage({
     unreadCount = unread;
     subAccountMembers = members;
     cannedResponses = canned;
+    contactsForPicker = contacts;
 
     if (activeId) {
       active = await prisma.conversation.findFirst({
@@ -282,10 +290,20 @@ export default async function ConversationsPage({
               <summary className="flex size-7 cursor-pointer list-none items-center justify-center rounded-md border border-border bg-background text-muted hover:text-foreground">
                 <Plus size={14} />
               </summary>
-              <div className="absolute right-0 top-8 z-30 w-64 rounded-lg border border-border bg-panel p-3 shadow-lg">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">New thread</p>
+              <div className="absolute right-0 top-8 z-30 w-72 rounded-lg border border-border bg-panel p-3 shadow-lg">
+                <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">New conversation</p>
                 <form action={createConversation} className="space-y-2">
-                  <Field label="Subject" name="subject" placeholder="New lead follow-up" />
+                  <label className="block">
+                    <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">Contact</span>
+                    <select className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm" name="contactId">
+                      <option value="">— No contact —</option>
+                      {contactsForPicker.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.firstName} {c.lastName ?? ""}{c.phone ? ` · ${c.phone}` : c.email ? ` · ${c.email}` : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <label className="block">
                     <span className="mb-1 block text-xs font-semibold uppercase tracking-wide text-muted">Channel</span>
                     <select className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-sm" defaultValue="SMS" name="channel">
@@ -296,8 +314,9 @@ export default async function ConversationsPage({
                       <option value="INTERNAL_NOTE">Internal note</option>
                     </select>
                   </label>
+                  <Field label="Subject (optional)" name="subject" placeholder="Follow-up" />
                   <SubmitButton className="w-full rounded-md bg-primary px-3 py-1.5 text-sm font-semibold text-white" pendingText="Creating…">
-                    Create thread
+                    Start conversation
                   </SubmitButton>
                 </form>
               </div>

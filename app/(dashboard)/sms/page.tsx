@@ -3,10 +3,12 @@ import { MessageSquareText, Phone, Settings } from "lucide-react";
 import { Badge, statusVariant } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { DbWarning } from "@/components/ui/db-warning";
+import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { twilioConfigured } from "@/lib/twilio";
 import { releasePhoneNumber } from "./actions";
+import { createPhoneNumber } from "@/app/(dashboard)/module-actions";
 import { NumberProvisioner } from "./number-provisioner";
 
 export default async function SmsPage() {
@@ -200,49 +202,79 @@ export default async function SmsPage() {
         </div>
 
         {/* Right sidebar */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center gap-2">
-              <Settings className="text-primary" size={18} />
-              <h2 className="font-semibold">Get a number</h2>
-            </div>
-          </CardHeader>
-          <CardBody>
-            {isTwilioConfigured ? (
-              <div className="space-y-3">
-                <p className="text-sm text-muted">
-                  Search for available US numbers by area code and add them to your account.
-                </p>
-                <NumberProvisioner />
+        <div className="space-y-4">
+          {/* Manual / trial number entry — always visible */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Phone className="text-primary" size={18} />
+                <h2 className="font-semibold">Add your number</h2>
               </div>
-            ) : (
-              <div className="space-y-3">
-                <p className="text-sm font-medium">Twilio not configured</p>
-                <p className="text-sm text-muted">
-                  To provision real phone numbers, add the following environment variables and
-                  redeploy:
-                </p>
-                <ul className="space-y-1 text-sm font-mono text-muted">
-                  <li>TWILIO_ACCOUNT_SID</li>
-                  <li>TWILIO_AUTH_TOKEN</li>
-                  <li>TWILIO_FROM_NUMBER</li>
-                </ul>
-                <p className="text-xs text-muted">
-                  Find these in your{" "}
-                  <a
-                    className="text-primary underline"
-                    href="https://console.twilio.com"
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    Twilio Console
-                  </a>
-                  .
-                </p>
+            </CardHeader>
+            <CardBody>
+              <p className="mb-3 text-sm text-muted">
+                Already have a Twilio number? Paste it here (E.164 format, e.g.{" "}
+                <span className="font-mono">+15550123456</span>). Then set{" "}
+                <span className="font-mono text-xs">TWILIO_FROM_NUMBER</span> in Vercel to the same value.
+              </p>
+              <form action={createPhoneNumber} className="flex gap-2">
+                <input
+                  className="flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm font-mono outline-none ring-primary/20 focus:ring-2"
+                  name="number"
+                  placeholder="+15550123456"
+                  required
+                  pattern="\+[0-9]{7,15}"
+                  title="E.164 format: + followed by digits"
+                />
+                <input name="provider" type="hidden" value="twilio" />
+                <SubmitButton
+                  className="shrink-0 rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:opacity-90 transition"
+                  pendingText="Adding…"
+                >
+                  Add
+                </SubmitButton>
+              </form>
+              <p className="mt-2 text-[11px] text-muted">
+                Find your number at{" "}
+                <a
+                  className="text-primary underline"
+                  href="https://console.twilio.com/us1/develop/phone-numbers/manage/active"
+                  rel="noreferrer"
+                  target="_blank"
+                >
+                  Twilio Console → Phone Numbers → Active Numbers
+                </a>
+              </p>
+            </CardBody>
+          </Card>
+
+          {/* Twilio provisioner — paid accounts */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Settings className="text-primary" size={18} />
+                <h2 className="font-semibold">Buy a new number</h2>
               </div>
-            )}
-          </CardBody>
-        </Card>
+            </CardHeader>
+            <CardBody>
+              {isTwilioConfigured ? (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted">
+                    Search for available US numbers by area code. Requires a paid Twilio account.
+                  </p>
+                  <NumberProvisioner />
+                </div>
+              ) : (
+                <p className="text-sm text-muted">
+                  Configure{" "}
+                  <span className="font-mono text-xs">TWILIO_ACCOUNT_SID</span>,{" "}
+                  <span className="font-mono text-xs">TWILIO_AUTH_TOKEN</span>, and{" "}
+                  <span className="font-mono text-xs">TWILIO_FROM_NUMBER</span> in Vercel to enable number search.
+                </p>
+              )}
+            </CardBody>
+          </Card>
+        </div>
       </section>
     </div>
   );

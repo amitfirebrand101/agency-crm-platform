@@ -24,14 +24,40 @@ export async function createConversation(formData: FormData) {
   const input = z
     .object({
       subject: z.string().trim().max(160).optional(),
-      channel: z.enum(["SMS", "EMAIL", "CALL", "VOICEMAIL", "INTERNAL_NOTE"])
+      channel: z.enum(["SMS", "EMAIL", "CALL", "VOICEMAIL", "INTERNAL_NOTE"]),
+      contactId: z.string().uuid().optional(),
     })
     .parse(Object.fromEntries(formData));
+
+  // If SMS/EMAIL + contact, reuse any open thread for that contact
+  if ((input.channel === "SMS" || input.channel === "EMAIL") && input.contactId) {
+    const existing = await prisma.conversation.findFirst({
+      where: {
+        agencyId: user.agencyId,
+        subAccountId: user.subAccountId,
+        contactId: input.contactId,
+        channel: input.channel,
+        status: { in: ["OPEN", "PENDING"] },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (existing) {
+      redirect(`/conversations?id=${existing.id}`);
+    }
+  }
+
   const conversation = await prisma.conversation.create({
-    data: { agencyId: user.agencyId, subAccountId: user.subAccountId, channel: input.channel, subject: input.subject || null }
+    data: {
+      agencyId: user.agencyId,
+      subAccountId: user.subAccountId,
+      channel: input.channel,
+      subject: input.subject || null,
+      contactId: input.contactId || null,
+    },
   });
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "CREATE", entityType: "Conversation", entityId: conversation.id });
   revalidatePath("/conversations");
+  redirect(`/conversations?id=${conversation.id}`);
 }
 
 export async function createCalendar(formData: FormData) {

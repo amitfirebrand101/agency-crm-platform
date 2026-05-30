@@ -86,6 +86,7 @@ export function ConversationClient({ conversation, cannedResponses, sendMessageA
   const [searchQuery, setSearchQuery] = useState("");
   const [body, setBody] = useState("");
   const [showCanned, setShowCanned] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   const filteredMessages = searchQuery.trim()
@@ -110,9 +111,14 @@ export function ConversationClient({ conversation, cannedResponses, sendMessageA
     e.preventDefault();
     if (!body.trim() || isPending) return;
     const fd = new FormData(e.currentTarget);
+    setSendError(null);
     startTransition(async () => {
-      await sendMessageAction(fd);
-      setBody("");
+      try {
+        await sendMessageAction(fd);
+        setBody("");
+      } catch (err) {
+        setSendError(err instanceof Error ? err.message : "Failed to send message.");
+      }
     });
   }
 
@@ -205,6 +211,12 @@ export function ConversationClient({ conversation, cannedResponses, sendMessageA
             rows={3}
             value={body}
           />
+
+          {sendError ? (
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+              {sendError}
+            </p>
+          ) : null}
 
           <div className="flex items-center gap-2">
             {cannedResponses.length > 0 && (
