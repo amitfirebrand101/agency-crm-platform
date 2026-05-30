@@ -31,7 +31,16 @@ type ConversationWithContact = Prisma.ConversationGetPayload<{
 type ConversationDetail = Prisma.ConversationGetPayload<{
   include: {
     contact: true;
-    messages: { orderBy: { createdAt: "asc" } };
+    messages: {
+      orderBy: { createdAt: "asc" };
+      select: {
+        id: true;
+        body: true;
+        direction: true;
+        status: true;
+        createdAt: true;
+      };
+    };
     assignedUser: { select: { id: true; name: true; email: true } };
   };
 }>;
@@ -189,7 +198,16 @@ export default async function ConversationsPage({
         },
         include: {
           contact: true,
-          messages: { orderBy: { createdAt: "asc" } },
+          messages: {
+              orderBy: { createdAt: "asc" },
+              select: {
+                id: true,
+                body: true,
+                direction: true,
+                status: true,
+                createdAt: true,
+              },
+            },
           assignedUser: { select: { id: true, name: true, email: true } },
         },
       });
@@ -601,7 +619,7 @@ export default async function ConversationsPage({
                   body: m.body,
                   direction: m.direction,
                   status: m.status,
-                  error: m.error ?? null,
+                  error: null, // populated after add-message-error.sql migration runs
                   createdAt: m.createdAt.toISOString(),
                 })),
               }}
