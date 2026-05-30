@@ -116,6 +116,7 @@ model User {
   auditLogs                AuditLog[]
   sentInvites              UserInvite[]           @relation("SentInvites")
   notifications            Notification[]
+  oauthTokens              UserOAuthToken[]
 }
 
 model Agency {
@@ -206,39 +207,41 @@ model SubAccountMembership {
 }
 
 model Contact {
-  id             String             @id @default(uuid()) @db.Uuid
-  agencyId       String             @db.Uuid
-  subAccountId   String             @db.Uuid
-  assignedUserId String?            @db.Uuid
-  firstName      String
-  lastName       String?
-  email          String?
-  phone          String?
-  companyName    String?
-  status         ContactStatus      @default(LEAD)
-  score          Int                @default(0)
-  source         String?
-  timezone       String?
-  addressLine1   String?
-  city           String?
-  region         String?
-  country        String?
-  postalCode     String?
-  emailOptOut    Boolean            @default(false)
-  smsOptOut      Boolean            @default(false)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
-  agency         Agency             @relation(fields: [agencyId], references: [id], onDelete: Cascade, map: "Contact_agencyId_fkey")
-  subAccount     SubAccount         @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
-  assignedUser   User?              @relation("AssignedContacts", fields: [assignedUserId], references: [id], onDelete: SetNull)
-  tags           ContactTag[]
-  customValues   CustomFieldValue[]
-  opportunities  Opportunity[]
-  conversations  Conversation[]
-  appointments   Appointment[]
-  tasks          ContactTask[]
-  invoices       Invoice[]
-  reviewRequests ReviewRequest[]
+  id               String               @id @default(uuid()) @db.Uuid
+  agencyId         String               @db.Uuid
+  subAccountId     String               @db.Uuid
+  assignedUserId   String?              @db.Uuid
+  firstName        String
+  lastName         String?
+  email            String?
+  phone            String?
+  companyName      String?
+  status           ContactStatus        @default(LEAD)
+  score            Int                  @default(0)
+  source           String?
+  timezone         String?
+  addressLine1     String?
+  city             String?
+  region           String?
+  country          String?
+  postalCode       String?
+  emailOptOut      Boolean              @default(false)
+  smsOptOut        Boolean              @default(false)
+  stripeCustomerId String?
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+  agency           Agency               @relation(fields: [agencyId], references: [id], onDelete: Cascade, map: "Contact_agencyId_fkey")
+  subAccount       SubAccount           @relation(fields: [subAccountId], references: [id], onDelete: Cascade)
+  assignedUser     User?                @relation("AssignedContacts", fields: [assignedUserId], references: [id], onDelete: SetNull)
+  tags             ContactTag[]
+  customValues     CustomFieldValue[]
+  opportunities    Opportunity[]
+  conversations    Conversation[]
+  appointments     Appointment[]
+  tasks            ContactTask[]
+  invoices         Invoice[]
+  reviewRequests   ReviewRequest[]
+  subscriptions    StripeSubscription[]
 
   @@index([agencyId, subAccountId])
   @@index([subAccountId, email])
@@ -455,25 +458,27 @@ model CalendarAvailability {
 }
 
 model Appointment {
-  id              String   @id @default(uuid()) @db.Uuid
-  calendarId      String   @db.Uuid
-  contactId       String?  @db.Uuid
-  startsAt        DateTime
-  endsAt          DateTime
-  title           String
-  status          String   @default("scheduled")
-  notes           String?
-  contactEmail    String?
-  contactPhone    String?
-  confirmToken    String?  @unique
-  cancelToken     String?  @unique
-  rescheduleToken String?  @unique
-  reminderSent    Boolean  @default(false)
-  customAnswers   Json?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-  calendar        Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
-  contact         Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  id                     String   @id @default(uuid()) @db.Uuid
+  calendarId             String   @db.Uuid
+  contactId              String?  @db.Uuid
+  startsAt               DateTime
+  endsAt                 DateTime
+  title                  String
+  status                 String   @default("scheduled")
+  notes                  String?
+  contactEmail           String?
+  contactPhone           String?
+  confirmToken           String?  @unique
+  cancelToken            String?  @unique
+  rescheduleToken        String?  @unique
+  reminderSent           Boolean  @default(false)
+  customAnswers          Json?
+  googleEventId          String?
+  stripePaymentIntentId  String?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+  calendar               Calendar @relation(fields: [calendarId], references: [id], onDelete: Cascade)
+  contact                Contact? @relation(fields: [contactId], references: [id], onDelete: SetNull)
 }
 
 model Automation {
@@ -979,28 +984,30 @@ model Product {
 }
 
 model Invoice {
-  id            String        @id @default(uuid()) @db.Uuid
-  agencyId      String        @db.Uuid
-  subAccountId  String        @db.Uuid
-  contactId     String?       @db.Uuid
-  number        String
-  status        String        @default("draft")
-  currency      String        @default("USD")
-  subtotalCents Int           @default(0)
-  taxCents      Int           @default(0)
-  discountCents Int           @default(0)
-  totalCents    Int           @default(0)
-  paidCents     Int           @default(0)
-  notes         String?
-  terms         String?
-  title         String        @default("Invoice")
-  dueDate       DateTime?
-  sentAt        DateTime?
-  paidAt        DateTime?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
-  contact       Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
-  items         InvoiceItem[]
+  id                    String        @id @default(uuid()) @db.Uuid
+  agencyId              String        @db.Uuid
+  subAccountId          String        @db.Uuid
+  contactId             String?       @db.Uuid
+  number                String
+  status                String        @default("draft")
+  currency              String        @default("USD")
+  subtotalCents         Int           @default(0)
+  taxCents              Int           @default(0)
+  discountCents         Int           @default(0)
+  totalCents            Int           @default(0)
+  paidCents             Int           @default(0)
+  notes                 String?
+  terms                 String?
+  title                 String        @default("Invoice")
+  dueDate               DateTime?
+  sentAt                DateTime?
+  paidAt                DateTime?
+  stripeInvoiceId       String?
+  stripePaymentIntentId String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  contact               Contact?      @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  items                 InvoiceItem[]
 
   @@index([agencyId, subAccountId])
   @@index([contactId])
@@ -1164,37 +1171,40 @@ model CourseLesson {
 
 // API key management
 model ApiKey {
-  id           String    @id @default(uuid()) @db.Uuid
-  agencyId     String    @db.Uuid
-  subAccountId String?   @db.Uuid
-  userId       String    @db.Uuid
-  name         String
-  keyHash      String    @unique
-  keyPrefix    String
-  scopes       String[]  @default([])
-  lastUsedAt   DateTime?
-  expiresAt    DateTime?
-  revokedAt    DateTime?
-  createdAt    DateTime  @default(now())
+  id               String          @id @default(uuid()) @db.Uuid
+  agencyId         String          @db.Uuid
+  subAccountId     String?         @db.Uuid
+  userId           String          @db.Uuid
+  name             String
+  keyHash          String          @unique
+  keyPrefix        String
+  scopes           String[]        @default([])
+  rateLimitPerHour Int             @default(1000)
+  lastUsedAt       DateTime?
+  expiresAt        DateTime?
+  revokedAt        DateTime?
+  createdAt        DateTime        @default(now())
+  usageLogs        ApiKeyUsageLog[]
 
   @@index([agencyId])
 }
 
 // Outbound webhook endpoints
 model WebhookEndpoint {
-  id              String    @id @default(uuid()) @db.Uuid
-  agencyId        String    @db.Uuid
-  subAccountId    String    @db.Uuid
+  id              String               @id @default(uuid()) @db.Uuid
+  agencyId        String               @db.Uuid
+  subAccountId    String               @db.Uuid
   name            String
   url             String
-  events          String[]  @default([])
+  events          String[]             @default([])
   secret          String
-  enabled         Boolean   @default(true)
-  successCount    Int       @default(0)
-  failureCount    Int       @default(0)
+  enabled         Boolean              @default(true)
+  successCount    Int                  @default(0)
+  failureCount    Int                  @default(0)
   lastTriggeredAt DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+  deliveryLogs    WebhookDeliveryLog[]
 
   @@index([agencyId, subAccountId])
 }
@@ -1268,4 +1278,161 @@ model Notification {
 
   @@index([userId, read])
   @@index([agencyId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Stripe Integration
+// ─────────────────────────────────────────────────────────────────────────────
+
+model PaymentLink {
+  id                   String   @id @default(uuid()) @db.Uuid
+  agencyId             String   @db.Uuid
+  subAccountId         String   @db.Uuid
+  name                 String
+  description          String?
+  type                 String   @default("one_time")
+  amountCents          Int      @default(0)
+  currency             String   @default("USD")
+  stripeProductId      String?
+  stripePriceId        String?
+  stripePaymentLinkId  String?
+  stripePaymentLinkUrl String?
+  active               Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  @@index([agencyId, subAccountId])
+}
+
+model StripeSubscription {
+  id                   String   @id @default(uuid()) @db.Uuid
+  agencyId             String   @db.Uuid
+  subAccountId         String   @db.Uuid
+  contactId            String   @db.Uuid
+  stripeSubscriptionId String   @unique
+  stripeCustomerId     String
+  stripePriceId        String?
+  status               String   @default("active")
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  canceledAt           DateTime?
+  trialEnd             DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  contact              Contact  @relation(fields: [contactId], references: [id], onDelete: Cascade)
+
+  @@index([agencyId, subAccountId])
+  @@index([contactId])
+  @@index([stripeSubscriptionId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-user OAuth tokens (Google Calendar, etc.)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model UserOAuthToken {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String   @db.Uuid
+  provider      String
+  encryptedData String   @db.Text
+  iv            String
+  authTag       String
+  expiresAt     DateTime?
+  metadata      Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider])
+  @@index([userId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Facebook Lead Ads Integration
+// ─────────────────────────────────────────────────────────────────────────────
+
+model FacebookLeadForm {
+  id            String   @id @default(uuid()) @db.Uuid
+  agencyId      String   @db.Uuid
+  subAccountId  String   @db.Uuid
+  fbPageId      String
+  fbFormId      String
+  fbFormName    String
+  fieldMappings Json     @default("{}")
+  active        Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([subAccountId, fbFormId])
+  @@index([agencyId, subAccountId])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Webhook delivery log (outbound)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model WebhookDeliveryLog {
+  id                String          @id @default(uuid()) @db.Uuid
+  webhookEndpointId String          @db.Uuid
+  event             String
+  payload           Json
+  responseStatus    Int?
+  responseBody      String?         @db.Text
+  durationMs        Int?
+  success           Boolean         @default(false)
+  error             String?
+  attemptedAt       DateTime        @default(now())
+  endpoint          WebhookEndpoint @relation(fields: [webhookEndpointId], references: [id], onDelete: Cascade)
+
+  @@index([webhookEndpointId, attemptedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Inbound webhook receivers (Zapier / third-party)
+// ─────────────────────────────────────────────────────────────────────────────
+
+model InboundWebhook {
+  id             String                   @id @default(uuid()) @db.Uuid
+  agencyId       String                   @db.Uuid
+  subAccountId   String                   @db.Uuid
+  name           String
+  token          String                   @unique
+  description    String?
+  active         Boolean                  @default(true)
+  receiveCount   Int                      @default(0)
+  lastReceivedAt DateTime?
+  createdAt      DateTime                 @default(now())
+  deliveries     InboundWebhookDelivery[]
+
+  @@index([agencyId, subAccountId])
+}
+
+model InboundWebhookDelivery {
+  id               String         @id @default(uuid()) @db.Uuid
+  inboundWebhookId String         @db.Uuid
+  ipAddress        String?
+  headers          Json           @default("{}")
+  payload          Json           @default("{}")
+  receivedAt       DateTime       @default(now())
+  inboundWebhook   InboundWebhook @relation(fields: [inboundWebhookId], references: [id], onDelete: Cascade)
+
+  @@index([inboundWebhookId, receivedAt])
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API key usage log
+// ─────────────────────────────────────────────────────────────────────────────
+
+model ApiKeyUsageLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  apiKeyId   String   @db.Uuid
+  method     String
+  path       String
+  ipAddress  String?
+  statusCode Int?
+  durationMs Int?
+  createdAt  DateTime @default(now())
+  apiKey     ApiKey   @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+
+  @@index([apiKeyId, createdAt])
 }

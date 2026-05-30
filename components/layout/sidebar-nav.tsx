@@ -29,6 +29,7 @@ import {
   Target,
   Webhook,
   Wrench,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -105,6 +106,7 @@ const navGroups: NavGroup[] = [
     items: [
       { href: "/api-keys", label: "API Keys", icon: Wrench },
       { href: "/webhooks", label: "Webhooks", icon: Webhook },
+      { href: "/webhooks/inbound", label: "Inbound Hooks", icon: Webhook },
       { href: "/custom-values", label: "Custom Values", icon: Settings },
     ],
   },
@@ -119,6 +121,7 @@ const navGroups: NavGroup[] = [
     label: "Admin",
     items: [
       { href: "/sub-accounts", label: "Sub Accounts", icon: Building2 },
+      { href: "/settings/integrations", label: "Integrations", icon: Zap },
       { href: "/settings", label: "Settings", icon: Settings },
       { href: "/settings/business-profile", label: "Business Profile", icon: Building2 },
     ],
