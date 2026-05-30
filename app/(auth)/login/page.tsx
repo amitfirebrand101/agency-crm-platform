@@ -1,7 +1,6 @@
+import { Suspense } from "react";
 import { LoginForm } from "@/components/auth/login-form";
 import { getPublicEnv } from "@/lib/env";
-
-export const dynamic = "force-dynamic";
 
 export default function LoginPage() {
   const env = getPublicEnv();
@@ -17,7 +16,9 @@ export default function LoginPage() {
               Secure access for agency teams, sub accounts, client data, and CRM operations.
             </p>
           </div>
-          <LoginForm />
+          <Suspense fallback={null}>
+            <LoginForm />
+          </Suspense>
         </div>
       </section>
       <section className="hidden border-l border-border bg-foreground p-10 text-white lg:block">
