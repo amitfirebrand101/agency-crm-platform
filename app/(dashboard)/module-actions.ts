@@ -274,6 +274,19 @@ export async function createMarketingCampaign(formData: FormData) {
   revalidatePath("/marketing");
 }
 
+export async function deleteMarketingCampaign(formData: FormData): Promise<void> {
+  const user = await requireWritableSubAccount();
+  const id = z.string().uuid().parse(String(formData.get("id") ?? ""));
+  const campaign = await prisma.marketingCampaign.findFirst({
+    where: { id, agencyId: user.agencyId, subAccountId: user.subAccountId },
+    select: { id: true },
+  });
+  if (!campaign) return;
+  await prisma.marketingCampaign.delete({ where: { id: campaign.id } });
+  await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "DELETE", entityType: "MarketingCampaign", entityId: id });
+  revalidatePath("/marketing");
+}
+
 export async function createPhoneNumber(formData: FormData) {
   const user = await requireWritableSubAccount();
   const input = z

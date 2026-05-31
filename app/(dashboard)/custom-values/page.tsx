@@ -86,7 +86,6 @@ export default async function CustomValuesPage() {
                     {/* Copy key button — client-side copy via form trick */}
                     <button
                       type="button"
-                      onClick={undefined}
                       data-copy={`{{${cv.key}}}`}
                       className="copy-key flex items-center gap-1 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-muted hover:bg-background hover:text-foreground transition"
                       title={`Copy {{${cv.key}}}`}

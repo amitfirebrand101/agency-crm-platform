@@ -6,13 +6,11 @@ import { Field } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { createBroadcast, deleteBroadcast } from "./actions";
+import { emailConfigured } from "@/lib/email";
+import { twilioConfigured } from "@/lib/twilio";
+import { createBroadcast, deleteBroadcast, sendBroadcast } from "./actions";
 
-// Wrap server actions so TypeScript accepts them as form `action` props.
-// The { error } return value is intentionally discarded here; pages use
-// server-side revalidation rather than client-side state for these forms.
-const createBroadcastAction = createBroadcast as (formData: FormData) => Promise<void>;
-const deleteBroadcastAction = deleteBroadcast as (formData: FormData) => Promise<void>;
+export const dynamic = "force-dynamic";
 
 export default async function BroadcastsPage() {
   const user = await requireUser();
@@ -32,6 +30,8 @@ export default async function BroadcastsPage() {
   const draftCount = broadcasts.filter((b) => b.status === "draft").length;
   const scheduledCount = broadcasts.filter((b) => b.status === "scheduled").length;
   const sentCount = broadcasts.filter((b) => b.status === "sent").length;
+  const hasEmail = emailConfigured();
+  const hasSms = twilioConfigured();
 
   return (
     <div className="space-y-6">
@@ -74,39 +74,63 @@ export default async function BroadcastsPage() {
           <CardBody>
             {broadcasts.length > 0 ? (
               <div className="divide-y divide-border">
-                {broadcasts.map((broadcast) => (
-                  <div className="flex items-center justify-between gap-4 py-3" key={broadcast.id}>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium">{broadcast.name}</div>
-                      <div className="flex items-center gap-2 text-sm text-muted">
-                        {broadcast.channel === "Email" ? (
-                          <Mail size={12} />
-                        ) : (
-                          <MessageSquare size={12} />
-                        )}
-                        <span>{broadcast.channel}</span>
-                        <span>·</span>
-                        <Send size={12} />
-                        <span>{broadcast.sentCount} / {broadcast.recipientCount} sent</span>
-                        <span>·</span>
-                        <span>{new Date(broadcast.createdAt).toLocaleDateString()}</span>
+                {broadcasts.map((broadcast) => {
+                  const canSend =
+                    broadcast.status === "draft" &&
+                    ((broadcast.channel === "SMS" && hasSms) ||
+                      (broadcast.channel === "Email" && hasEmail));
+
+                  return (
+                    <div className="flex items-center justify-between gap-4 py-3" key={broadcast.id}>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-medium">{broadcast.name}</div>
+                        <div className="flex items-center gap-2 text-sm text-muted">
+                          {broadcast.channel === "Email" ? (
+                            <Mail size={12} />
+                          ) : (
+                            <MessageSquare size={12} />
+                          )}
+                          <span>{broadcast.channel}</span>
+                          <span>·</span>
+                          <Send size={12} />
+                          <span>{broadcast.sentCount} / {broadcast.recipientCount} sent</span>
+                          <span>·</span>
+                          <span>{new Date(broadcast.createdAt).toLocaleDateString()}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Badge variant={statusVariant(broadcast.status)}>{broadcast.status}</Badge>
+                        {canSend ? (
+                          <form action={sendBroadcast}>
+                            <input type="hidden" name="id" value={broadcast.id} />
+                            <SubmitButton
+                              className="flex items-center gap-1 rounded-lg border border-primary/30 bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary hover:bg-primary/20 transition"
+                              pendingText="Sending…"
+                              title="Send to all eligible contacts now"
+                            >
+                              <Send size={11} />
+                              Send Now
+                            </SubmitButton>
+                          </form>
+                        ) : broadcast.status === "draft" ? (
+                          <span className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-muted">
+                            Provider not connected
+                          </span>
+                        ) : null}
+                        <form action={deleteBroadcast}>
+                          <input type="hidden" name="id" value={broadcast.id} />
+                          <SubmitButton
+                            className="rounded p-1 text-muted hover:bg-background hover:text-danger"
+                            pendingText="…"
+                            title="Delete broadcast"
+                          >
+                            <Trash2 size={14} />
+                          </SubmitButton>
+                        </form>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <Badge variant={statusVariant(broadcast.status)}>{broadcast.status}</Badge>
-                      <form action={deleteBroadcastAction}>
-                        <input type="hidden" name="id" value={broadcast.id} />
-                        <SubmitButton
-                          className="rounded p-1 text-muted hover:bg-background hover:text-danger"
-                          pendingText="…"
-                          title="Delete broadcast"
-                        >
-                          <Trash2 size={14} />
-                        </SubmitButton>
-                      </form>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="py-8 text-center">
@@ -129,7 +153,7 @@ export default async function BroadcastsPage() {
               </div>
             </CardHeader>
             <CardBody>
-              <form action={createBroadcastAction} className="space-y-3">
+              <form action={createBroadcast} className="space-y-3">
                 <Field label="Name" name="name" placeholder="Summer sale announcement" required />
 
                 <label className="block">
@@ -181,12 +205,16 @@ export default async function BroadcastsPage() {
               </p>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span>Email (SMTP / SendGrid)</span>
-                  <Badge variant="warning">Not connected</Badge>
+                  <span>Email (SMTP)</span>
+                  <Badge variant={hasEmail ? "success" : "warning"}>
+                    {hasEmail ? "Connected" : "Not connected"}
+                  </Badge>
                 </div>
                 <div className="flex justify-between">
-                  <span>SMS (Twilio / Telnyx)</span>
-                  <Badge variant="warning">Not connected</Badge>
+                  <span>SMS (Twilio)</span>
+                  <Badge variant={hasSms ? "success" : "warning"}>
+                    {hasSms ? "Connected" : "Not connected"}
+                  </Badge>
                 </div>
               </div>
               <p className="mt-3 text-xs text-muted">

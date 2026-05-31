@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell } from "lucide-react";
 import { useRouter } from "next/navigation";
 
@@ -25,62 +25,92 @@ function relTime(dateStr: string): string {
 }
 
 export function NotificationBell() {
+  const [unreadCount, setUnreadCount] = useState(0);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
+  const [loadedFull, setLoadedFull] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  async function fetchNotifications() {
+  // Lightweight count poll — only fetches a number, not full payloads
+  const fetchCount = useCallback(async () => {
+    try {
+      const res = await fetch("/api/notifications/count", { cache: "no-store" });
+      if (res.ok) {
+        const data = (await res.json()) as { count: number };
+        setUnreadCount(data.count ?? 0);
+      }
+    } catch {
+      // Silently ignore — bell shows stale count
+    }
+  }, []);
+
+  // Full notifications — only fetched when dropdown is opened
+  const fetchFull = useCallback(async () => {
     try {
       const res = await fetch("/api/notifications", { cache: "no-store" });
       if (res.ok) {
         const data = (await res.json()) as { notifications: Notification[] };
-        setNotifications(data.notifications ?? []);
+        const list = data.notifications ?? [];
+        setNotifications(list);
+        setUnreadCount(list.filter((n) => !n.read).length);
+        setLoadedFull(true);
       }
     } catch {
-      // Silently ignore network errors — bell just shows stale count
+      // ignore
     }
-  }
-
-  useEffect(() => {
-    fetchNotifications();
-    const interval = setInterval(fetchNotifications, 30000);
-    return () => clearInterval(interval);
   }, []);
+
+  // Poll count every 60s, pausing when the tab is hidden
+  useEffect(() => {
+    fetchCount();
+
+    function tick() {
+      if (!document.hidden) fetchCount();
+    }
+    const interval = setInterval(tick, 60_000);
+    const onVisible = () => { if (!document.hidden) fetchCount(); };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [fetchCount]);
+
+  // Load full list when dropdown first opens
+  useEffect(() => {
+    if (open && !loadedFull) fetchFull();
+  }, [open, loadedFull, fetchFull]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
     }
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
   }, []);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
-
   async function markRead(id: string) {
-    await fetch(`/api/notifications/${id}/read`, { method: "POST" });
+    // Optimistic update
     setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+    setUnreadCount((c) => Math.max(0, c - 1));
+    await fetch(`/api/notifications/${id}/read`, { method: "POST" });
   }
 
   async function markAllRead() {
-    await Promise.all(
-      notifications.filter((n) => !n.read).map((n) =>
-        fetch(`/api/notifications/${n.id}/read`, { method: "POST" })
-      )
-    );
+    // Optimistic update
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setUnreadCount(0);
+    // Single batch request
+    await fetch("/api/notifications/mark-all-read", { method: "POST" });
   }
 
   async function handleNotificationClick(n: Notification) {
-    await markRead(n.id);
+    if (!n.read) await markRead(n.id);
     setOpen(false);
-    if (n.link) {
-      router.push(n.link as Parameters<typeof router.push>[0]);
-    }
+    if (n.link) router.push(n.link as Parameters<typeof router.push>[0]);
   }
 
   return (
@@ -115,7 +145,11 @@ export function NotificationBell() {
           </div>
 
           <div className="max-h-80 overflow-y-auto">
-            {notifications.length === 0 ? (
+            {!loadedFull ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              </div>
+            ) : notifications.length === 0 ? (
               <p className="py-8 text-center text-sm text-muted">No notifications yet.</p>
             ) : (
               notifications.map((n) => (

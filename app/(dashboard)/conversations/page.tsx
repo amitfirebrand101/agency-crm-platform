@@ -22,8 +22,8 @@ const CONV_PAGE_SIZE = 30;
 
 type ConversationWithContact = Prisma.ConversationGetPayload<{
   include: {
-    contact: true;
-    messages: { orderBy: { createdAt: "desc" }; take: 1 };
+    contact: { select: { id: true; firstName: true; lastName: true; email: true; phone: true } };
+    messages: { orderBy: { createdAt: "desc" }; take: 1; select: { id: true; body: true; direction: true; createdAt: true } };
     assignedUser: { select: { id: true; name: true; email: true } };
   };
 }>;
@@ -151,8 +151,8 @@ export default async function ConversationsPage({
         skip,
         take: CONV_PAGE_SIZE + 1,
         include: {
-          contact: true,
-          messages: { orderBy: { createdAt: "desc" }, take: 1 },
+          contact: { select: { id: true, firstName: true, lastName: true, email: true, phone: true } },
+          messages: { orderBy: { createdAt: "desc" }, take: 1, select: { id: true, body: true, direction: true, createdAt: true } },
           assignedUser: { select: { id: true, name: true, email: true } },
         },
       }),

@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { Bot, CalendarDays, ContactRound, MessageSquareText, Target, TrendingUp } from "lucide-react";
 import { Badge, statusVariant } from "@/components/ui/badge";
@@ -23,68 +24,88 @@ export default async function DashboardPage() {
 
   try {
     const now = new Date();
+    const scope = {
+      agencyId: user.agencyId,
+      subAccountId: user.subAccountId ?? undefined,
+    };
 
     const [
       contacts,
+      totalContacts,
       openConvCount,
       automationPub,
-      openOpps,
+      oppAgg,
       upcomingApts,
       runs,
-      stageSummary
+      stages,
+      stageAgg,
     ] = await Promise.all([
+      // Recent contacts — select only needed columns
       prisma.contact.findMany({
-        where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
+        where: scope,
         orderBy: { createdAt: "desc" },
         take: 6,
-        select: { id: true, firstName: true, lastName: true, email: true, source: true, status: true, createdAt: true }
+        select: { id: true, firstName: true, lastName: true, email: true, source: true, status: true, createdAt: true },
       }),
-      prisma.conversation.count({
-        where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined, status: "OPEN" }
+      // Total contact count in the same query batch
+      prisma.contact.count({ where: scope }),
+      // Open conversations
+      prisma.conversation.count({ where: { ...scope, status: "OPEN" } }),
+      // Published automations
+      prisma.automation.count({ where: { ...scope, status: "published" } }),
+      // Opportunity aggregate — avoids loading all rows just to sum/count
+      prisma.opportunity.aggregate({
+        where: { ...scope, status: "OPEN" },
+        _count: { id: true },
+        _sum: { valueCents: true },
       }),
-      prisma.automation.count({
-        where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined, status: "published" }
-      }),
-      prisma.opportunity.findMany({
-        where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined, status: "OPEN" },
-        select: { valueCents: true }
-      }),
+      // Upcoming appointments count
       prisma.appointment.count({
         where: {
-          calendar: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
+          calendar: scope,
           startsAt: { gte: now },
-          status: { notIn: ["cancelled", "no_show"] }
-        }
+          status: { notIn: ["cancelled", "no_show"] },
+        },
       }),
+      // Recent automation runs
       prisma.automationRun.findMany({
-        where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
+        where: scope,
         orderBy: { startedAt: "desc" },
         take: 6,
-        include: { automation: { select: { name: true } } }
+        include: { automation: { select: { name: true } } },
       }),
+      // Stage names for pipeline (no opportunity rows)
       prisma.pipelineStage.findMany({
-        where: { pipeline: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined } },
-        include: {
-          _count: { select: { opportunities: { where: { status: "OPEN" } } } },
-          opportunities: { where: { status: "OPEN" }, select: { valueCents: true } }
-        },
-        orderBy: { position: "asc" }
-      })
+        where: { pipeline: scope },
+        select: { id: true, name: true, position: true },
+        orderBy: { position: "asc" },
+      }),
+      // Opportunity counts + sums grouped by stage — no full row loads
+      prisma.opportunity.groupBy({
+        by: ["stageId"],
+        where: { ...scope, status: "OPEN" },
+        _count: { id: true },
+        _sum: { valueCents: true },
+      }),
     ]);
 
-    contactCount = await prisma.contact.count({ where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined } });
+    contactCount = totalContacts;
     openConversations = openConvCount;
     publishedAutomations = automationPub;
-    openOpportunityCount = openOpps.length;
-    openOpportunityValue = openOpps.reduce((s, o) => s + o.valueCents, 0);
+    openOpportunityCount = oppAgg._count.id;
+    openOpportunityValue = oppAgg._sum.valueCents ?? 0;
     upcomingAppointments = upcomingApts;
     recentContacts = contacts;
     recentRuns = runs;
-    pipelineByStage = stageSummary.map((s) => ({
-      stageName: s.name,
-      count: s._count.opportunities,
-      value: s.opportunities.reduce((acc, o) => acc + o.valueCents, 0)
-    })).filter((s) => s.count > 0);
+
+    // Join stage names with aggregated opportunity data
+    const aggByStage = new Map(stageAgg.map((a) => [a.stageId, a]));
+    pipelineByStage = stages
+      .map((s) => {
+        const agg = aggByStage.get(s.id);
+        return { stageName: s.name, count: agg?._count.id ?? 0, value: agg?._sum.valueCents ?? 0 };
+      })
+      .filter((s) => s.count > 0);
   } catch (error) {
     databaseUnavailable = true;
     console.error("Dashboard database query failed", error);

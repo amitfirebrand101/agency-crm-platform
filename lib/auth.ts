@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import type { AgencyRole, SubAccountRole } from "@prisma/client";
@@ -87,8 +88,11 @@ export async function getAuthUser() {
 /**
  * Returns the full session user (with agency/sub-account context), or null.
  * On first login, auto-provisions an agency and sub-account for new users.
+ *
+ * Wrapped in React cache() so multiple callers in the same server-render
+ * request (e.g. layout + page) share a single Supabase + Prisma lookup.
  */
-export async function getCurrentUser(): Promise<SessionUser | null> {
+export const getCurrentUser: () => Promise<SessionUser | null> = cache(async function getCurrentUser(): Promise<SessionUser | null> {
   const authUser = await getAuthUser();
   if (!authUser?.email) return null;
 
@@ -163,17 +167,20 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     subAccountName: subAccount?.name ?? null,
     subAccountRole: subAccountMembership?.role ?? null,
   };
-}
+});
 
 /**
  * Requires an authenticated user. Redirects to /login if not signed in.
  * Also redirects deactivated members.
+ *
+ * Also wrapped in cache() — calling this from both layout and page
+ * within the same request costs only one auth lookup.
  */
-export async function requireUser(): Promise<SessionUser> {
+export const requireUser: () => Promise<SessionUser> = cache(async function requireUser(): Promise<SessionUser> {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
   return user;
-}
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Role helpers (backward-compatible; prefer lib/permissions.ts for new code)

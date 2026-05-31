@@ -561,113 +561,14 @@ function BlogTab({ posts }: { posts: Prisma.BlogPostGetPayload<object>[] }) {
 
 function ChatWidgetTab() {
   return (
-    <div className="grid gap-6 xl:grid-cols-[1fr_22rem]">
-      <div className="space-y-4">
-        <Card>
-          <CardBody>
-            <div className="flex items-start gap-4">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10">
-                <MessageSquare className="text-primary" size={20} />
-              </div>
-              <div>
-                <h3 className="font-semibold">Chat Widget</h3>
-                <p className="mt-1 text-sm text-muted">Add a live chat or AI-powered chatbot to any website or funnel page. Customize appearance, auto-response messages, and routing rules.</p>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardBody>
-              <div className="mb-3 flex items-center justify-between">
-                <p className="font-medium text-sm">Appearance</p>
-                <Badge variant="muted">Configure</Badge>
-              </div>
-              <div className="space-y-2 text-sm text-muted">
-                <div className="flex items-center justify-between">
-                  <span>Widget color</span>
-                  <div className="h-5 w-5 rounded-full bg-primary border border-border" />
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Position</span>
-                  <span className="text-foreground text-xs font-medium">Bottom right</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Show on mobile</span>
-                  <span className="text-foreground text-xs font-medium">Yes</span>
-                </div>
-              </div>
-            </CardBody>
-          </Card>
-
-          <Card>
-            <CardBody>
-              <div className="mb-3 flex items-center justify-between">
-                <p className="font-medium text-sm">Auto-Messages</p>
-                <Badge variant="muted">Configure</Badge>
-              </div>
-              <div className="space-y-2 text-sm text-muted">
-                <div className="flex items-center justify-between">
-                  <span>Welcome message</span>
-                  <span className="text-foreground text-xs font-medium">Enabled</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Away message</span>
-                  <span className="text-foreground text-xs font-medium">Enabled</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span>Bot fallback</span>
-                  <span className="text-foreground text-xs font-medium">Disabled</span>
-                </div>
-              </div>
-            </CardBody>
-          </Card>
-        </div>
-
-        <Card>
-          <CardHeader>
-            <p className="font-semibold text-sm">Embed Code</p>
-          </CardHeader>
-          <CardBody>
-            <p className="mb-2 text-xs text-muted">Add this snippet to your website&apos;s &lt;head&gt; tag to enable the chat widget.</p>
-            <div className="rounded-md bg-background border border-border p-3">
-              <code className="text-xs text-muted font-mono whitespace-pre">{`<script src="https://app.golowlevel.com/chat.js"
-  data-account="YOUR_ACCOUNT_ID"
-  async>
-</script>`}</code>
-            </div>
-          </CardBody>
-        </Card>
+    <div className="rounded-lg border border-dashed border-border p-16 text-center">
+      <div className="mx-auto mb-4 flex size-14 items-center justify-center rounded-xl bg-primary/10">
+        <MessageSquare className="text-primary" size={24} />
       </div>
-
-      <Card>
-        <CardHeader>
-          <div className="flex items-center gap-2">
-            <MessageSquare className="text-primary" size={17} />
-            <h2 className="font-semibold">Widget Settings</h2>
-          </div>
-        </CardHeader>
-        <CardBody>
-          <div className="space-y-3">
-            <div>
-              <label className="block text-xs font-medium mb-1">Welcome Message</label>
-              <textarea className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm resize-none" rows={3} defaultValue="Hey 👋 How can we help you today?" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1">Away Message</label>
-              <textarea className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm resize-none" rows={2} defaultValue="We're away right now, but we'll get back to you soon!" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1">Team Name</label>
-              <input className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm" placeholder="Support Team" />
-            </div>
-            <button className="w-full rounded-md bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary/90 transition" type="button">
-              Save Settings
-            </button>
-          </div>
-        </CardBody>
-      </Card>
+      <p className="font-semibold text-lg">Chat Widget — Coming Soon</p>
+      <p className="mt-2 text-sm text-muted max-w-sm mx-auto">
+        Embed a live chat widget on any website or funnel page. Configuration and embed code will be available here once the feature is ready.
+      </p>
     </div>
   );
 }

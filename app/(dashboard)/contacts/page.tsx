@@ -102,7 +102,7 @@ export default async function ContactsPage({
 
     const [
       fetchedContacts, fetchedTags, fetchedCustomFields,
-      total, filtered, leads, customers, inactive, smartListResult
+      total, filtered, statusCounts, smartListResult
     ] = await Promise.all([
       prisma.contact.findMany({
         where,
@@ -118,17 +118,20 @@ export default async function ContactsPage({
       }),
       prisma.tag.findMany({
         where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
-        orderBy: { name: "asc" }
+        orderBy: { name: "asc" },
       }),
       prisma.customField.findMany({
         where: { agencyId: user.agencyId, subAccountId: user.subAccountId ?? undefined },
-        orderBy: { name: "asc" }
+        orderBy: { name: "asc" },
       }),
       prisma.contact.count({ where: baseWhere }),
       prisma.contact.count({ where }),
-      prisma.contact.count({ where: { ...baseWhere, status: "LEAD" } }),
-      prisma.contact.count({ where: { ...baseWhere, status: "CUSTOMER" } }),
-      prisma.contact.count({ where: { ...baseWhere, status: "INACTIVE" } }),
+      // One query for all status counts instead of 3 separate counts
+      prisma.contact.groupBy({
+        by: ["status"],
+        where: baseWhere,
+        _count: { id: true },
+      }),
       listSmartLists(),
     ]);
 
@@ -137,9 +140,11 @@ export default async function ContactsPage({
     customFields = fetchedCustomFields;
     totalContacts = total;
     filteredCount = filtered;
-    leadsCount = leads;
-    customersCount = customers;
-    inactiveCount = inactive;
+    for (const row of statusCounts) {
+      if (row.status === "LEAD") leadsCount = row._count.id;
+      else if (row.status === "CUSTOMER") customersCount = row._count.id;
+      else if (row.status === "INACTIVE") inactiveCount = row._count.id;
+    }
     smartLists = smartListResult.lists;
   } catch (error) {
     databaseUnavailable = true;

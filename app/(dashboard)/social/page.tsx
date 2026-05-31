@@ -7,9 +7,6 @@ import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { createSocialPost, deleteSocialPost } from "./actions";
 
-const createSocialPostAction = createSocialPost as (formData: FormData) => Promise<void>;
-const deleteSocialPostAction = deleteSocialPost as (formData: FormData) => Promise<void>;
-
 const PLATFORM_LABELS: Record<string, string> = {
   facebook: "Facebook",
   instagram: "Instagram",
@@ -105,7 +102,7 @@ export default async function SocialPlannerPage() {
                         )}
                       </div>
                     </div>
-                    <form action={deleteSocialPostAction} className="shrink-0">
+                    <form action={deleteSocialPost} className="shrink-0">
                       <input type="hidden" name="id" value={post.id} />
                       <SubmitButton
                         className="rounded p-1 text-muted hover:bg-background hover:text-danger"
@@ -139,7 +136,7 @@ export default async function SocialPlannerPage() {
               </div>
             </CardHeader>
             <CardBody>
-              <form action={createSocialPostAction} className="space-y-3">
+              <form action={createSocialPost} className="space-y-3">
                 <label className="block">
                   <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-muted">
                     Content

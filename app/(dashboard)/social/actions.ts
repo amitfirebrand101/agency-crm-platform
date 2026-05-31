@@ -5,17 +5,16 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
-export async function createSocialPost(formData: FormData): Promise<{ error: string } | undefined> {
+export async function createSocialPost(formData: FormData): Promise<void> {
   let user: Awaited<ReturnType<typeof requireUser>>;
   try {
     user = await requireUser();
   } catch {
-    return { error: "Authentication required." };
+    console.error("createSocialPost: authentication failed");
+    return;
   }
 
-  if (!user.subAccountId) {
-    return { error: "A sub-account is required to create a social post." };
-  }
+  if (!user.subAccountId) return;
 
   const rawPlatforms = formData.getAll("platforms").map((p) => String(p));
   const rawScheduledAt = String(formData.get("scheduledAt") ?? "").trim();
@@ -37,7 +36,8 @@ export async function createSocialPost(formData: FormData): Promise<{ error: str
   });
 
   if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    console.error("createSocialPost: validation failed", parsed.error.issues[0]?.message);
+    return;
   }
 
   const { content, platforms, scheduledAt } = parsed.data;
@@ -54,39 +54,36 @@ export async function createSocialPost(formData: FormData): Promise<{ error: str
       },
     });
   } catch (err) {
-    return { error: `Failed to create post: ${err instanceof Error ? err.message : String(err)}` };
+    console.error("createSocialPost: failed", err);
+    return;
   }
 
   revalidatePath("/social");
 }
 
-export async function deleteSocialPost(formData: FormData): Promise<{ error: string } | undefined> {
+export async function deleteSocialPost(formData: FormData): Promise<void> {
   let user: Awaited<ReturnType<typeof requireUser>>;
   try {
     user = await requireUser();
   } catch {
-    return { error: "Authentication required." };
+    console.error("deleteSocialPost: authentication failed");
+    return;
   }
 
-  if (!user.subAccountId) {
-    return { error: "A sub-account is required to delete a social post." };
-  }
+  if (!user.subAccountId) return;
 
-  const idParsed = z.string().uuid("Invalid post ID.").safeParse(String(formData.get("id") ?? ""));
-  if (!idParsed.success) {
-    return { error: idParsed.error.issues[0]?.message ?? "Invalid post ID." };
-  }
+  const idParsed = z.string().uuid().safeParse(String(formData.get("id") ?? ""));
+  if (!idParsed.success) return;
 
   try {
     const existing = await prisma.socialPost.findFirst({
       where: { id: idParsed.data, agencyId: user.agencyId, subAccountId: user.subAccountId },
     });
-    if (!existing) {
-      return { error: "Post not found or access denied." };
-    }
+    if (!existing) return;
     await prisma.socialPost.delete({ where: { id: idParsed.data } });
   } catch (err) {
-    return { error: `Failed to delete post: ${err instanceof Error ? err.message : String(err)}` };
+    console.error("deleteSocialPost: failed", err);
+    return;
   }
 
   revalidatePath("/social");

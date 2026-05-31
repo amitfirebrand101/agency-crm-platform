@@ -4,8 +4,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-
-// ── Schemas ────────────────────────────────────────────────────────────────────
+import { twilioConfigured, sendSms } from "@/lib/twilio";
+import { emailConfigured, sendEmail } from "@/lib/email";
 
 const sendReviewRequestSchema = z.object({
   contactId: z.string().uuid("Invalid contact ID"),
@@ -23,8 +23,6 @@ const deleteReviewRequestSchema = z.object({
   id: z.string().uuid("Invalid request ID"),
 });
 
-// ── Actions ────────────────────────────────────────────────────────────────────
-
 export async function sendReviewRequest(formData: FormData): Promise<void> {
   const user = await requireUser();
   if (!user.subAccountId) return;
@@ -37,17 +35,55 @@ export async function sendReviewRequest(formData: FormData): Promise<void> {
     return;
   }
 
-  try {
-    // Verify contact belongs to this agency + sub-account
-    await prisma.contact.findFirstOrThrow({
-      where: {
-        id: input.contactId,
-        agencyId: user.agencyId,
-        subAccountId: user.subAccountId,
-      },
-      select: { id: true },
-    });
+  const contact = await prisma.contact.findFirst({
+    where: {
+      id: input.contactId,
+      agencyId: user.agencyId,
+      subAccountId: user.subAccountId,
+    },
+    select: { id: true, firstName: true, phone: true, email: true },
+  });
 
+  if (!contact) return;
+
+  const platformLabel = input.platform.charAt(0).toUpperCase() + input.platform.slice(1);
+  const reviewLink = input.reviewUrl ?? "";
+  const messageBody = reviewLink
+    ? `Hi ${contact.firstName}, we'd love your review on ${platformLabel}! ${reviewLink}`
+    : `Hi ${contact.firstName}, we'd love your review on ${platformLabel}!`;
+
+  let deliveryStatus: string = "pending";
+
+  if (input.channel === "SMS") {
+    if (twilioConfigured() && contact.phone) {
+      try {
+        await sendSms(contact.phone, messageBody);
+        deliveryStatus = "sent";
+      } catch (err) {
+        console.error("sendReviewRequest: SMS delivery failed", err);
+        deliveryStatus = "failed";
+      }
+    }
+  } else {
+    if (emailConfigured() && contact.email) {
+      try {
+        await sendEmail({
+          to: contact.email,
+          subject: `We'd love your ${platformLabel} review!`,
+          text: messageBody,
+          html: reviewLink
+            ? `<p>${messageBody}</p><p><a href="${reviewLink}">Leave a review</a></p>`
+            : `<p>${messageBody}</p>`,
+        });
+        deliveryStatus = "sent";
+      } catch (err) {
+        console.error("sendReviewRequest: email delivery failed", err);
+        deliveryStatus = "failed";
+      }
+    }
+  }
+
+  try {
     await prisma.reviewRequest.create({
       data: {
         agencyId: user.agencyId,
@@ -56,15 +92,12 @@ export async function sendReviewRequest(formData: FormData): Promise<void> {
         platform: input.platform,
         channel: input.channel,
         reviewUrl: input.reviewUrl ?? null,
-        // NOTE: Actual SMS/email delivery requires Twilio/SMTP integration.
-        // Record is stored with status "pending"; delivery status will be
-        // updated by the sending integration when implemented.
-        status: "pending",
+        status: deliveryStatus,
         sentAt: new Date(),
       },
     });
   } catch (err) {
-    console.error("sendReviewRequest failed", err);
+    console.error("sendReviewRequest: db write failed", err);
     return;
   }
 
@@ -84,8 +117,7 @@ export async function deleteReviewRequest(formData: FormData): Promise<void> {
   }
 
   try {
-    // Verify ownership before deletion
-    const request = await prisma.reviewRequest.findFirstOrThrow({
+    const request = await prisma.reviewRequest.findFirst({
       where: {
         id: input.id,
         agencyId: user.agencyId,
@@ -93,7 +125,7 @@ export async function deleteReviewRequest(formData: FormData): Promise<void> {
       },
       select: { id: true },
     });
-
+    if (!request) return;
     await prisma.reviewRequest.delete({ where: { id: request.id } });
   } catch (err) {
     console.error("deleteReviewRequest failed", err);

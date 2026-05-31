@@ -1,12 +1,16 @@
-import { Megaphone, Plus, TrendingUp } from "lucide-react";
-import { createMarketingCampaign } from "@/app/(dashboard)/module-actions";
+import { Megaphone, Plus, Trash2, TrendingUp } from "lucide-react";
+import { createMarketingCampaign, deleteMarketingCampaign } from "@/app/(dashboard)/module-actions";
 import { Badge, statusVariant } from "@/components/ui/badge";
 import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { DbWarning } from "@/components/ui/db-warning";
 import { Field } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
+import { emailConfigured } from "@/lib/email";
+import { twilioConfigured } from "@/lib/twilio";
 import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
 
 export default async function MarketingPage() {
   const user = await requireUser();
@@ -26,6 +30,8 @@ export default async function MarketingPage() {
   const draftCount = campaigns.filter((c) => c.status === "draft").length;
   const scheduledCount = campaigns.filter((c) => c.status === "scheduled").length;
   const sentCount = campaigns.filter((c) => c.status === "sent").length;
+  const hasEmail = emailConfigured();
+  const hasSms = twilioConfigured();
 
   return (
     <div className="space-y-6">
@@ -68,7 +74,7 @@ export default async function MarketingPage() {
               <div className="divide-y divide-border">
                 {campaigns.map((campaign) => (
                   <div className="flex items-center justify-between gap-4 py-3" key={campaign.id}>
-                    <div>
+                    <div className="min-w-0 flex-1">
                       <div className="font-medium">{campaign.name}</div>
                       <div className="flex items-center gap-2 text-sm text-muted">
                         <TrendingUp size={12} />
@@ -77,7 +83,19 @@ export default async function MarketingPage() {
                         <span>{new Date(campaign.createdAt).toLocaleDateString()}</span>
                       </div>
                     </div>
-                    <Badge variant={statusVariant(campaign.status)}>{campaign.status}</Badge>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <Badge variant={statusVariant(campaign.status)}>{campaign.status}</Badge>
+                      <form action={deleteMarketingCampaign}>
+                        <input type="hidden" name="id" value={campaign.id} />
+                        <SubmitButton
+                          className="rounded p-1 text-muted hover:bg-background hover:text-danger"
+                          pendingText="…"
+                          title="Delete campaign"
+                        >
+                          <Trash2 size={14} />
+                        </SubmitButton>
+                      </form>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -122,12 +140,16 @@ export default async function MarketingPage() {
               <p className="text-xs font-semibold uppercase tracking-wide text-muted mb-2">Provider status</p>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span>Email (SMTP/SendGrid)</span>
-                  <Badge variant="warning">Not connected</Badge>
+                  <span>Email (SMTP)</span>
+                  <Badge variant={hasEmail ? "success" : "warning"}>
+                    {hasEmail ? "Connected" : "Not connected"}
+                  </Badge>
                 </div>
                 <div className="flex justify-between">
-                  <span>SMS (Twilio/Telnyx)</span>
-                  <Badge variant="warning">Not connected</Badge>
+                  <span>SMS (Twilio)</span>
+                  <Badge variant={hasSms ? "success" : "warning"}>
+                    {hasSms ? "Connected" : "Not connected"}
+                  </Badge>
                 </div>
               </div>
               <p className="mt-3 text-xs text-muted">Connect providers in Settings → Integrations to enable sending.</p>
