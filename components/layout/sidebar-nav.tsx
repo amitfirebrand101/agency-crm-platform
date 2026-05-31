@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -17,6 +18,7 @@ import {
   Image,
   LayoutDashboard,
   Link2,
+  Loader2,
   Megaphone,
   MessageSquareText,
   Package,
@@ -32,6 +34,8 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+type NavWindow = Window & { __navStart?: () => void };
 
 type NavItem = {
   href: string;
@@ -130,6 +134,18 @@ const navGroups: NavGroup[] = [
 
 export function SidebarNav() {
   const pathname = usePathname();
+  const [pendingHref, setPendingHref] = useState<string | null>(null);
+
+  // Clear pending state as soon as navigation completes
+  useEffect(() => {
+    setPendingHref(null);
+  }, [pathname]);
+
+  function handleClick(href: string) {
+    if (href === pathname) return;
+    setPendingHref(href);
+    (window as NavWindow).__navStart?.();
+  }
 
   return (
     <nav className="flex-1 overflow-y-auto py-3 px-2">
@@ -142,14 +158,17 @@ export function SidebarNav() {
           ) : null}
           <div className="space-y-0.5">
             {group.items.map((item) => {
-              const active =
+              const isReallyActive =
                 pathname === item.href ||
-                (item.href !== "/dashboard" && pathname.startsWith(item.href + "/")) ||
-                (item.href !== "/dashboard" && pathname === item.href);
+                (item.href !== "/dashboard" && pathname.startsWith(item.href + "/"));
+              const isPending = pendingHref === item.href;
+              const active = isPending || isReallyActive;
+
               return (
                 <Link
                   key={item.href}
                   href={item.href as never}
+                  onClick={() => handleClick(item.href)}
                   className={cn(
                     "group flex items-center gap-3 rounded-md px-3 py-2 text-[13px] font-medium transition-colors",
                     active
@@ -157,17 +176,24 @@ export function SidebarNav() {
                       : "text-sidebar-text hover:bg-sidebar-hover hover:text-sidebar-text-active"
                   )}
                 >
-                  <item.icon
-                    size={16}
-                    className={cn(
-                      "shrink-0 transition-colors",
-                      active
-                        ? "text-sidebar-text-active"
-                        : "text-sidebar-text group-hover:text-sidebar-text-active"
-                    )}
-                  />
+                  {isPending ? (
+                    <Loader2
+                      size={16}
+                      className="shrink-0 animate-spin text-sidebar-text-active"
+                    />
+                  ) : (
+                    <item.icon
+                      size={16}
+                      className={cn(
+                        "shrink-0 transition-colors",
+                        active
+                          ? "text-sidebar-text-active"
+                          : "text-sidebar-text group-hover:text-sidebar-text-active"
+                      )}
+                    />
+                  )}
                   {item.label}
-                  {active && (
+                  {active && !isPending && (
                     <span className="ml-auto h-1.5 w-1.5 rounded-full bg-primary" />
                   )}
                 </Link>

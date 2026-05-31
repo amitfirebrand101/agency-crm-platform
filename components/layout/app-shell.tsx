@@ -3,6 +3,7 @@ import { ChevronDown, LayoutGrid, Search, Bell } from "lucide-react";
 import { signOut } from "@/app/(dashboard)/actions";
 import { SidebarNav } from "@/components/layout/sidebar-nav";
 import { NotificationBell } from "@/app/(dashboard)/notification-bell";
+import { RouteProgress } from "@/components/ui/route-progress";
 import type { SessionUser } from "@/lib/auth";
 
 const appName =
@@ -24,6 +25,7 @@ export function AppShell({ user, children }: AppShellProps) {
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
+      <RouteProgress />
       {/* ── Sidebar ───────────────────────────────────────────────── */}
       <aside className="hidden lg:flex w-[220px] shrink-0 flex-col bg-sidebar-bg border-r border-sidebar-border">
         {/* Logo */}
