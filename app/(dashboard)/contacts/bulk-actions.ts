@@ -125,7 +125,6 @@ export async function bulkDelete(formData: FormData): Promise<{ ok: boolean; err
     });
     await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "DELETE", entityType: "Contact", metadata: { bulkAction: "delete", count: ids.length } });
     revalidatePath("/contacts");
-    revalidatePath("/dashboard");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: String(err instanceof Error ? err.message : err) };

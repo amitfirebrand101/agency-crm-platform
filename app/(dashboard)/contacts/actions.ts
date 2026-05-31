@@ -144,7 +144,6 @@ export async function createContact(
   });
 
   revalidatePath("/contacts");
-  revalidatePath("/dashboard");
   return { error: null };
 }
 
@@ -232,7 +231,6 @@ export async function deleteContact(formData: FormData) {
   await prisma.contact.delete({ where: { id: contact.id, agencyId: user.agencyId, subAccountId: user.subAccountId } });
   await auditLog({ agencyId: user.agencyId, actorUserId: user.id, action: "DELETE", entityType: "Contact", entityId: contact.id });
   revalidatePath("/contacts");
-  revalidatePath("/dashboard");
   redirect("/contacts");
 }
 

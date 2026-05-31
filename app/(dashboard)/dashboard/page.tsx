@@ -6,6 +6,7 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { timeAsync } from "@/lib/perf";
 
 export default async function DashboardPage() {
   const user = await requireUser();
@@ -39,7 +40,7 @@ export default async function DashboardPage() {
       runs,
       stages,
       stageAgg,
-    ] = await Promise.all([
+    ] = await timeAsync("dashboard-queries", () => Promise.all([
       // Recent contacts — select only needed columns
       prisma.contact.findMany({
         where: scope,
@@ -87,7 +88,7 @@ export default async function DashboardPage() {
         _count: { id: true },
         _sum: { valueCents: true },
       }),
-    ]);
+    ]));
 
     contactCount = totalContacts;
     openConversations = openConvCount;

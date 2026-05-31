@@ -10,6 +10,7 @@ import { Field } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { timeAsync } from "@/lib/perf";
 import { ConversationClient, PrioritySelector } from "./conversation-client";
 
 export const dynamic = "force-dynamic";
@@ -144,7 +145,7 @@ export default async function ConversationsPage({
 
     const skip = (cpage - 1) * CONV_PAGE_SIZE;
 
-    const [fetched, count, unread, members, canned, contacts] = await Promise.all([
+    const [fetched, count, unread, members, canned, contacts] = await timeAsync("conversations-queries", () => Promise.all([
       prisma.conversation.findMany({
         where,
         orderBy: { updatedAt: "desc" },
@@ -180,7 +181,7 @@ export default async function ConversationsPage({
         take: 200,
         select: { id: true, firstName: true, lastName: true, phone: true, email: true },
       }),
-    ]);
+    ]));
 
     totalConversations = count;
     conversations = fetched;

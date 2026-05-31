@@ -89,7 +89,6 @@ export async function sendMessage(formData: FormData) {
   });
 
   revalidatePath("/conversations");
-  revalidatePath(`/conversations/${conversationId}`);
 }
 
 export async function updateConversationStatus(formData: FormData) {
@@ -103,5 +102,4 @@ export async function updateConversationStatus(formData: FormData) {
   });
 
   revalidatePath("/conversations");
-  revalidatePath(`/conversations/${conversationId}`);
 }

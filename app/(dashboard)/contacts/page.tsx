@@ -8,6 +8,7 @@ import { Field } from "@/components/ui/field";
 import { SubmitButton } from "@/components/ui/submit-button";
 import { requireUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { timeAsync } from "@/lib/perf";
 import { ContactTable } from "./contact-table";
 import { Pagination } from "./pagination";
 import { CreateContactForm } from "./create-contact-form";
@@ -103,7 +104,7 @@ export default async function ContactsPage({
     const [
       fetchedContacts, fetchedTags, fetchedCustomFields,
       total, filtered, statusCounts, smartListResult
-    ] = await Promise.all([
+    ] = await timeAsync("contacts-queries", () => Promise.all([
       prisma.contact.findMany({
         where,
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -133,7 +134,7 @@ export default async function ContactsPage({
         _count: { id: true },
       }),
       listSmartLists(),
-    ]);
+    ]));
 
     contacts = fetchedContacts;
     tags = fetchedTags;
